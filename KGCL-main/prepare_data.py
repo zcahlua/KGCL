@@ -2,6 +2,10 @@ import argparse
 import copy
 import os
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+from kgcl.config import add_arguments, add_config_argument, load_config
 from typing import Any, Tuple
 
 import joblib
@@ -162,22 +166,16 @@ def prepare_data(args: Any) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='USPTO_50k',
-                        help='dataset: USPTO_50k or uspto_full or uspto_mit')
-    parser.add_argument('--mode', type=str, default='train',
-                        help='Type of dataset being prepared: train or valid or test')
-    parser.add_argument("--use_rxn_class", default=False,
-                        action='store_true', help='Whether to use rxn_class')
-    parser.add_argument("--batch_size", default=256,
-                        type=int, help="Number of shards")
-    parser.add_argument('--max_steps', type=int, default=9,
-                        help='maximum number of edit steps')
-    parser.add_argument('--print_every', type=int,
-                        default=1000, help='Print during preprocessing')
-    args = parser.parse_args()
-
-    args.dataset = args.dataset.lower()
+    parser = argparse.ArgumentParser(description='Prepare KGCL tensors from preprocessed reactions')
+    add_config_argument(parser)
+    add_arguments(parser, ['dataset', 'mode', 'use_rxn_class', 'preprocess_batch_size', 'max_steps', 'preprocess_print_every'])
+    parsed = parser.parse_args()
+    overrides = vars(parsed).copy()
+    config_file = overrides.pop('config_file')
+    args = load_config(config_file=config_file, cli_overrides=overrides)
+    # Backward-compatible attribute names used by the original implementation.
+    args.batch_size = args.preprocess_batch_size
+    args.print_every = args.preprocess_print_every
     prepare_data(args=args)
 
 

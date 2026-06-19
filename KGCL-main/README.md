@@ -7,6 +7,26 @@ KGCL: Knowledge-Enhanced Graph Contrastive Learning for Retrosynthesis Predictio
 - numpy = 1.26.4
 - rdkit = 2024.03.4
 
+
+## Repository map / where to change what
+
+| Task | Start here | Notes |
+| --- | --- | --- |
+| Change model architecture | `models/KGCL.py`, `models/encoder.py`, `utils/attn_layer.py` | Model dimensions and feature flags are configured in `src/kgcl/config/schema.py`. |
+| Change training hyperparameters | `configs/default.yaml`, `src/kgcl/config/schema.py` | Use `python train.py --config ... --epochs ...`; validation is in `src/kgcl/config/validation.py`. |
+| Add a dataset | `data/<dataset>/`, `preprocess.py`, `utils/datasets.py` | Keep dataset names lowercase after CLI normalization. |
+| Modify preprocessing | `preprocess.py`, `utils/generate_edits.py`, `utils/reaction_actions.py` | `prepare_data.py` converts preprocessed reactions into tensor shards. |
+| Add a loss or objective | `train.py`, `utils/ADNCE.py` | Preserve existing defaults and checkpoint format. |
+| Add an evaluation metric | `eval.py`, `eval-full.py`, `eval-rtacc.py` | Beam search is implemented in `models/beam_search.py`. |
+| Change checkpoint behavior | `train.py` (`save_checkpoint`) | Existing checkpoints store `state` and optional `saveables`. |
+| Change output paths | `configs/default.yaml`, `src/kgcl/config/schema.py`, workflow scripts | Current outputs remain under `experiments/<dataset>/<rxn_class_mode>/`. |
+| Change logging | `models/model_utils.py` (`CSVLogger`) and `train.py` | Training logs are CSV files in each experiment directory. |
+| Run training | `python train.py --config configs/default.yaml` | Existing `python train.py --dataset uspto_50k` remains supported. |
+| Run evaluation | `python eval.py --dataset uspto_50k` | Evaluation scripts retain historical CLI behavior. |
+| Run tests | `python -m pytest` | Tests focus on configuration and import smoke coverage. |
+
+See `docs/architecture.md` for execution flow and `docs/configuration.md` for parameter precedence, defaults, and migration notes.
+
 ## Data
 The original datasets used in this paper are from:
 

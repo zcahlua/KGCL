@@ -2,6 +2,10 @@ import argparse
 import os
 import sys
 import random
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+from kgcl.config import add_arguments, add_config_argument, load_config
 
 import numpy as np
 from utils.ADNCE import ADNCE, adnce
@@ -256,42 +260,11 @@ def main(args):
 if __name__ == '__main__':
 
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='uspto_50k ',
-                        help='dataset: uspto_50k or uspto_full or uspto_mit')
-    parser.add_argument('--use_rxn_class', default=False,
-                        action='store_true', help='Whether to use rxn_class')
-    parser.add_argument('--atom_message', default=False, action='store_true',
-                        help='Node-level or Bond-level message passing')
-    parser.add_argument('--use_attn', default=False,
-                        action='store_true', help='Whether to use global attention')
-    parser.add_argument('--n_heads', type=int, default=8,
-                        help='Number of heads in Multihead attention')
-    parser.add_argument('--epochs', type=int, default=200,
-                        help='Maximum number of epochs for training')
-    parser.add_argument('--mpn_size', type=int,
-                        default=256, help='MPN hidden_dim')
-    parser.add_argument('--depth', type=int, default=10,
-                        help='Number of iterations')
-    parser.add_argument('--dropout_mpn', type=float,
-                        default=0.15, help='MPN dropout rate')
-    parser.add_argument('--mlp_size', type=int,
-                        default=512, help='MLP hidden_dim')
-    parser.add_argument('--dropout_mlp', type=float,
-                        default=0.2, help='MLP dropout rate')
-    parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
-
-    parser.add_argument('--patience', type=int, default=5,
-                        help='Number of epochs with no improvement after which lr will be reduced')
-    parser.add_argument('--factor', type=float, default=0.8,
-                        help='Factor by which the lr will be reduced')
-    parser.add_argument('--thresh', type=float, default=0.01,
-                        help='Threshold for measuring the new optimum')
-    parser.add_argument('--max_clip', type=int, default=10,
-                        help='Maximum number of gradient clip')
-    parser.add_argument('--print_every', type=int,
-                        default=200, help='Print during train process')
-    parser.add_argument('--num_workers', default=24,
-                        help='Number of processes for data loading')
-    args = parser.parse_args().__dict__
+    parser = argparse.ArgumentParser(description='Train KGCL model')
+    add_config_argument(parser)
+    add_arguments(parser, ['dataset', 'use_rxn_class', 'atom_message', 'use_attn', 'n_heads', 'epochs', 'mpn_size', 'depth', 'dropout_mpn', 'mlp_size', 'dropout_mlp', 'lr', 'patience', 'factor', 'thresh', 'max_clip', 'print_every', 'num_workers'])
+    parsed = parser.parse_args()
+    overrides = vars(parsed).copy()
+    config_file = overrides.pop('config_file')
+    args = load_config(config_file=config_file, cli_overrides=overrides).to_dict()
     main(args)
