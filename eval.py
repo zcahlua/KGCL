@@ -1,4 +1,8 @@
 import sys as _kgcl_sys
+from pathlib import Path as _kgcl_Path
+_kgcl_src = _kgcl_Path(__file__).resolve().parent / "src"
+if _kgcl_src.exists() and str(_kgcl_src) not in _kgcl_sys.path:
+    _kgcl_sys.path.insert(0, str(_kgcl_src))
 from kgcl.cli.help import maybe_print_help as _kgcl_maybe_print_help
 _kgcl_maybe_print_help(__file__.rsplit('/', 1)[-1], _kgcl_sys.argv)
 
@@ -11,6 +15,7 @@ from tqdm import tqdm
 from collections import Counter
 import torch
 from rdkit import Chem, RDLogger
+from kgcl.config import add_arguments, add_config_argument, load_config
 
 from models import KGCL, BeamSearch
 
@@ -73,39 +78,33 @@ def canonicalize_smiles_clear_map(smiles, return_max_frag=True):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='uspto_50k',
-                        help='dataset: uspto_50k or USPTO_full or uspto_mit')
-    parser.add_argument("--use_rxn_class", default=False,
-                        action='store_true', help='Whether to use rxn_class')
-    parser.add_argument('--experiments', type=str, default='BEST',
-                        help='Name of edits prediction experiment')
-    parser.add_argument('--beam_size', type=int,
-                        default=50, help='Beam search width')
-    parser.add_argument('--max_steps', type=int, default=9,
-                        help='maximum number of edit steps')
+    parser = argparse.ArgumentParser(description="Evaluate KGCL model")
+    add_config_argument(parser)
+    add_arguments(parser, ['dataset', 'root_dir', 'device', 'use_rxn_class', 'experiments', 'beam_size', 'max_steps'])
+    parsed = parser.parse_args()
+    overrides = vars(parsed).copy()
+    config_file = overrides.pop('config_file')
+    args = load_config(config_file=config_file, cli_overrides=overrides)
+    device = DEVICE if args.device == "auto" else args.device
 
-    args = parser.parse_args()
-    args.dataset = args.dataset.lower()
-
-    data_dir = os.path.join(ROOT_DIR, 'data', f'{args.dataset}', 'test')
+    data_dir = os.path.join(args.root_dir, 'data', f'{args.dataset}', 'test')
     test_file = os.path.join(data_dir, 'test.file.kekulized')
     test_data = joblib.load(test_file)
     if args.use_rxn_class:
         exp_dir = os.path.join(
-            ROOT_DIR, 'experiments', f'{args.dataset}', 'with_rxn_class', f'{args.experiments}')
+            args.root_dir, 'experiments', f'{args.dataset}', 'with_rxn_class', f'{args.experiments}')
         checkpoint = 'epoch_128.pt'
     else:
         exp_dir = os.path.join(
-            ROOT_DIR, 'experiments', f'{args.dataset}', 'without_rxn_class', f'{args.experiments}')
+            args.root_dir, 'experiments', f'{args.dataset}', 'without_rxn_class', f'{args.experiments}')
         checkpoint = 'epoch_132.pt'
 
     checkpoint = torch.load(os.path.join(exp_dir, checkpoint))
     config = checkpoint['saveables']
 
-    model = KGCL(**config, device=DEVICE)
+    model = KGCL(**config, device=device)
     model.load_state_dict(checkpoint['state'])
-    model.to(DEVICE)
+    model.to(device)
     model.eval()
 
     top_k = np.zeros(args.beam_size)

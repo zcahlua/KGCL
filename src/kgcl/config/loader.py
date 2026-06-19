@@ -11,6 +11,46 @@ from .validation import validate_config
 ENV_PREFIX = "KGCL_"
 
 
+def _parse_scalar(value: str) -> Any:
+    normalized = value.strip()
+    if normalized in {"", "null", "Null", "NULL", "~"}:
+        return None
+    if normalized in {"true", "True", "TRUE"}:
+        return True
+    if normalized in {"false", "False", "FALSE"}:
+        return False
+    try:
+        return int(normalized)
+    except ValueError:
+        pass
+    try:
+        return float(normalized)
+    except ValueError:
+        return normalized
+
+
+def _load_simple_yaml(text: str, path: str | os.PathLike[str]) -> Dict[str, Any]:
+    """Parse the flat scalar YAML subset used by bundled lightweight configs.
+
+    PyYAML remains the preferred parser for full YAML support.  This fallback
+    keeps defaults and tests readable in environments that have not installed
+    optional scientific/runtime dependencies yet.
+    """
+    data: Dict[str, Any] = {}
+    for line_no, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line or line.endswith("[") or "[" in line or "]" in line:
+            raise ValueError(f"Malformed configuration file {path}: line {line_no}: {raw_line}")
+        key, value = line.split(":", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"Malformed configuration file {path}: line {line_no}: {raw_line}")
+        data[key] = _parse_scalar(value)
+    return data
+
+
 def _coerce(name: str, value: Any) -> Any:
     if name in ALIASES:
         warnings.warn(f"Configuration key '{name}' is deprecated; use '{ALIASES[name]}' instead.", DeprecationWarning, stacklevel=2)
@@ -51,7 +91,10 @@ def load_config_file(path: str | os.PathLike[str]) -> Dict[str, Any]:
         try:
             import yaml
         except ImportError as exc:  # pragma: no cover - exercised only without test extra
-            raise ValueError("YAML configuration files require PyYAML; install kgcl[test] or provide JSON.") from exc
+            raw = _load_simple_yaml(text, path)
+            flat: Dict[str, Any] = {}
+            _flatten("", raw, flat)
+            return flat
         try:
             raw = yaml.safe_load(text)
         except yaml.YAMLError as exc:

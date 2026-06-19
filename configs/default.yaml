@@ -14,7 +14,7 @@ dropout_mpn: 0.15
 mlp_size: 512
 dropout_mlp: 0.2
 epochs: 200
-lr: 0.001
+lr: null
 patience: 5
 factor: 0.8
 thresh: 0.01

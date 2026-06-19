@@ -1,4 +1,8 @@
-"""Lightweight public workflow parsers for help and compatibility tests."""
+"""Lightweight public workflow parsers for compatibility tests.
+
+The helpers in this module are retained for scripts that need to answer
+``--help`` before importing optional scientific dependencies.
+"""
 from __future__ import annotations
 
 import argparse
@@ -15,12 +19,12 @@ def parser_for(script: str) -> argparse.ArgumentParser:
     if script == "preprocess.py":
         parser = argparse.ArgumentParser(description="Preprocess KGCL reaction CSV files")
         add_config_argument(parser)
-        add_arguments(parser, ['dataset', 'root_dir', 'mode', 'preprocess_print_every', 'kekulize'])
+        add_arguments(parser, ['dataset', 'root_dir', 'mode', 'preprocess_print_every', 'kekulize', 'max_steps'])
         return parser
     if script == "prepare_data.py":
         parser = argparse.ArgumentParser(description="Prepare KGCL tensors from preprocessed reactions")
         add_config_argument(parser)
-        add_arguments(parser, ['dataset', 'root_dir', 'mode', 'use_rxn_class', 'preprocess_batch_size', 'max_steps', 'preprocess_print_every'])
+        add_arguments(parser, ['dataset', 'root_dir', 'mode', 'use_rxn_class', 'preprocess_batch_size', 'max_steps', 'preprocess_print_every', 'kekulize'])
         return parser
     if script == "eval-full.py":
         parser = argparse.ArgumentParser(description="Evaluate KGCL on USPTO-FULL")

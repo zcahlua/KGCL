@@ -1,8 +1,13 @@
 import sys as _kgcl_sys
+from pathlib import Path as _kgcl_Path
+_kgcl_src = _kgcl_Path(__file__).resolve().parent / "src"
+if _kgcl_src.exists() and str(_kgcl_src) not in _kgcl_sys.path:
+    _kgcl_sys.path.insert(0, str(_kgcl_src))
 from kgcl.cli.help import maybe_print_help as _kgcl_maybe_print_help
 _kgcl_maybe_print_help(__file__.rsplit('/', 1)[-1], _kgcl_sys.argv)
 
 import argparse
+import sys
 import copy
 import os
 from kgcl.config import add_arguments, add_config_argument, load_config
@@ -60,7 +65,9 @@ def prepare_data(args: Any) -> None:
     """ 
     prepare data batches for edits prediction
     """
-    datafile = os.path.join(args.root_dir, 'data', args.dataset, args.mode, f'{args.mode}.file.kekulized')
+    datafile = os.path.join(args.root_dir, 'data', args.dataset, args.mode, f'{args.mode}.file')
+    if args.kekulize:
+        datafile += '.kekulized'
     rxns_data = joblib.load(datafile)
 
     batch_graphs = []
@@ -78,7 +85,8 @@ def prepare_data(args: Any) -> None:
         r, p = rxn_smi.split('>>')
         r_mol = Chem.MolFromSmiles(r)
         p_mol = Chem.MolFromSmiles(p)
-        Chem.Kekulize(p_mol)
+        if args.kekulize:
+            Chem.Kekulize(p_mol)
 
         if len(rxn_data.edits) > args.max_steps:
             print(f'Edits step exceed max_steps. Skipping reaction {idx}')
@@ -138,7 +146,7 @@ def prepare_data(args: Any) -> None:
 def main():
     parser = argparse.ArgumentParser(description='Prepare KGCL tensors from preprocessed reactions')
     add_config_argument(parser)
-    add_arguments(parser, ['dataset', 'root_dir', 'mode', 'use_rxn_class', 'preprocess_batch_size', 'max_steps', 'preprocess_print_every'])
+    add_arguments(parser, ['dataset', 'root_dir', 'mode', 'use_rxn_class', 'preprocess_batch_size', 'max_steps', 'preprocess_print_every', 'kekulize'])
     parsed = parser.parse_args()
     overrides = vars(parsed).copy()
     config_file = overrides.pop('config_file')
