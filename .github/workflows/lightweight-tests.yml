@@ -1,0 +1,29 @@
+name: Lightweight tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  config-and-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install lightweight test dependencies
+        run: python -m pip install -e '.[test]'
+      - name: Run config and CLI tests
+        run: python -m pytest tests/smoke tests/unit
+      - name: Compile package
+        run: python -m compileall src
+      - name: Check lightweight help
+        run: |
+          python train.py --help
+          python preprocess.py --help
+          python prepare_data.py --help
+          python eval.py --help
+          python eval-full.py --help
+          python eval-rtacc.py --help
