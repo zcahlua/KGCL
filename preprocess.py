@@ -1,8 +1,13 @@
 import sys as _kgcl_sys
+from pathlib import Path as _kgcl_Path
+_kgcl_src = _kgcl_Path(__file__).resolve().parent / "src"
+if _kgcl_src.exists() and str(_kgcl_src) not in _kgcl_sys.path:
+    _kgcl_sys.path.insert(0, str(_kgcl_src))
 from kgcl.cli.help import maybe_print_help as _kgcl_maybe_print_help
 _kgcl_maybe_print_help(__file__.rsplit('/', 1)[-1], _kgcl_sys.argv)
 
 import argparse
+import sys
 import os
 from kgcl.config import add_arguments, add_config_argument, load_config
 from collections import Counter
@@ -75,14 +80,14 @@ def preprocessing(rxns: List, args: Any, rxn_classes: List = [], rxns_id=[]) -> 
             continue
 
         if args.dataset == 'uspto_full':
-            if len(rxn_data.edits) > 9 or len(rxn_data.edits) == 1:
+            if len(rxn_data.edits) > args.max_steps or len(rxn_data.edits) == 1:
                 print(f'Edits step exceed max_steps or edit step is 1. Skipping reaction {idx}')
                 print()
                 sys.stdout.flush()
                 continue
 
         if args.dataset == 'uspto_mit':
-            if len(rxn_data.edits) > 9 or len(rxn_data.edits) == 1:
+            if len(rxn_data.edits) > args.max_steps or len(rxn_data.edits) == 1:
                 print(f'Edits step exceed max_steps or edit step is 1. Skipping reaction {idx}')
                 print()
                 sys.stdout.flush()
@@ -197,7 +202,7 @@ def preprocessing(rxns: List, args: Any, rxn_classes: List = [], rxns_id=[]) -> 
 def main():
     parser = argparse.ArgumentParser(description='Preprocess KGCL reaction CSV files')
     add_config_argument(parser)
-    add_arguments(parser, ['dataset', 'root_dir', 'mode', 'preprocess_print_every', 'kekulize'])
+    add_arguments(parser, ['dataset', 'root_dir', 'mode', 'preprocess_print_every', 'kekulize', 'max_steps'])
     parsed = parser.parse_args()
     overrides = vars(parsed).copy()
     config_file = overrides.pop('config_file')

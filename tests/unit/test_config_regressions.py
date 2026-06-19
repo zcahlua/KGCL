@@ -5,7 +5,7 @@ import sys
 import pytest
 
 from kgcl.config import add_arguments, load_config, load_config_file
-from kgcl.config.schema import FIELD_TYPES
+from kgcl.config.schema import FIELD_TYPES, KGCLConfig
 
 
 def test_resolved_field_types_are_callable():
@@ -86,6 +86,10 @@ def test_malformed_configuration_file_rejected(tmp_path):
     path.write_text("dataset: [unterminated\n")
     with pytest.raises(ValueError, match="Malformed configuration file"):
         load_config_file(path)
+
+
+def test_default_yaml_matches_schema_defaults():
+    assert load_config_file("configs/default.yaml") == KGCLConfig().to_dict()
 
 
 @pytest.mark.parametrize("script", ["train.py", "preprocess.py", "prepare_data.py", "eval.py", "eval-full.py", "eval-rtacc.py"])

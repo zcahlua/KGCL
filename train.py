@@ -1,4 +1,8 @@
 import sys as _kgcl_sys
+from pathlib import Path as _kgcl_Path
+_kgcl_src = _kgcl_Path(__file__).resolve().parent / "src"
+if _kgcl_src.exists() and str(_kgcl_src) not in _kgcl_sys.path:
+    _kgcl_sys.path.insert(0, str(_kgcl_src))
 from kgcl.cli.help import maybe_print_help as _kgcl_maybe_print_help
 _kgcl_maybe_print_help(__file__.rsplit('/', 1)[-1], _kgcl_sys.argv)
 
