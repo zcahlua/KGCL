@@ -1,0 +1,3 @@
+dataset: uspto_50k
+use_rxn_class: false
+epochs: 200

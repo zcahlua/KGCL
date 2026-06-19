@@ -1,6 +1,10 @@
 import argparse
 import os
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+from kgcl.config import add_arguments, add_config_argument, load_config
 from collections import Counter
 from typing import Any, List
 
@@ -191,28 +195,21 @@ def preprocessing(rxns: List, args: Any, rxn_classes: List = [], rxns_id=[]) -> 
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='USPTO_50k',
-                        help='dataset: USPTO_50k or uspto_full' or 'uspto_mit')
-    parser.add_argument('--mode', type=str, default='train',
-                        help='Type of dataset being prepared: train or valid or test')
-    parser.add_argument('--print_every', type=int,
-                        default=1000, help='Print during preprocessing')
-    parser.add_argument('--kekulize', default=True, action='store_true',
-                        help='Whether to kekulize mols during training')
-    args = parser.parse_args()
-
-    args.dataset = args.dataset.lower()
+    parser = argparse.ArgumentParser(description='Preprocess KGCL reaction CSV files')
+    add_config_argument(parser)
+    add_arguments(parser, ['dataset', 'mode', 'preprocess_print_every', 'kekulize'])
+    parsed = parser.parse_args()
+    overrides = vars(parsed).copy()
+    config_file = overrides.pop('config_file')
+    args = load_config(config_file=config_file, cli_overrides=overrides)
+    args.print_every = args.preprocess_print_every
     datadir = f'data/{args.dataset}/'
     rxn_key = 'reactants>reagents>production'
+    filename = f'canonicalized_{args.mode}.csv'
+    df = pd.read_csv(os.path.join(datadir, filename))
     if args.dataset == 'uspto_50k':
-        filename = f'canonicalized_{args.mode}.csv'
-        df = pd.read_csv(os.path.join(datadir, filename))
-        preprocessing(rxns=df[rxn_key], args=args,
-                      rxn_classes=df['class'], rxns_id=df['id'])
+        preprocessing(rxns=df[rxn_key], args=args, rxn_classes=df['class'], rxns_id=df['id'])
     else:
-        filename = f'canonicalized_{args.mode}.csv'
-        df = pd.read_csv(os.path.join(datadir, filename))
         preprocessing(rxns=df[rxn_key], args=args)
 
 
