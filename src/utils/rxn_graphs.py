@@ -1,13 +1,13 @@
+from pathlib import Path
+from functools import lru_cache
 from typing import List, Tuple
 from dataclasses import dataclass
-from functools import lru_cache
 from rdkit import Chem
 from utils.mol_features import get_atom_features, get_bond_features
-import pickle
 import torch
 import torch.nn.functional as F
 import math
-from kgcl.resources.functional_groups import resolve_functional_group_resources
+from kgcl.resources.functional_groups import get_functional_group_resource_config, resolve_functional_group_resources
 
 @dataclass(frozen=True)
 class FunctionalGroupResources:
@@ -16,18 +16,46 @@ class FunctionalGroupResources:
     embeddings: dict
 
 
-def _load_functional_group_resources(use_rxn_class: bool) -> FunctionalGroupResources:
-    paths = resolve_functional_group_resources(use_rxn_class=use_rxn_class)
-    funcgroups = paths.definitions.read_text().strip().split("\n")
-    names = tuple(line.split()[0] for line in funcgroups if line.strip())
-    smarts = tuple(Chem.MolFromSmarts(line.split()[1]) for line in funcgroups if line.strip())
-    with paths.embeddings.open("rb") as fh:
-        embeddings = pickle.load(fh)
+def load_embedding_mapping(path):
+    import pickle
+    try:
+        with path.open("rb") as fh:
+            data = pickle.load(fh)
+    except Exception as exc:
+        raise ValueError(f"Could not load KGCL functional-group embedding mapping from {path}: {exc}") from exc
+    if not hasattr(data, "keys"):
+        raise ValueError(f"KGCL functional-group embedding mapping at {path} must be a mapping")
+    return data
+
+@lru_cache(maxsize=8)
+def _load_cached(use_rxn_class: bool, resource_root_key: str | None, root_dir_key: str | None) -> FunctionalGroupResources:
+    paths = resolve_functional_group_resources(
+        use_rxn_class=use_rxn_class,
+        resource_root=Path(resource_root_key) if resource_root_key else None,
+        root_dir=Path(root_dir_key) if root_dir_key else None,
+    )
+    entries = []
+    for line_no, raw in enumerate(paths.definitions.read_text().splitlines(), start=1):
+        if not raw.strip():
+            continue
+        parts = raw.split()
+        if len(parts) < 2:
+            raise ValueError(f"Malformed functional-group definition {paths.definitions}:{line_no}: {raw}")
+        mol = Chem.MolFromSmarts(parts[1])
+        if mol is None:
+            raise ValueError(f"Could not parse SMARTS in {paths.definitions}:{line_no}: {parts[1]}")
+        entries.append((parts[0], mol))
+    embeddings = load_embedding_mapping(paths.embeddings)
+    missing = [name for name, _ in entries if name not in embeddings]
+    if missing:
+        raise ValueError(f"Functional-group definitions in {paths.definitions} are missing embedding keys in {paths.embeddings}: {missing[:5]}")
+    names = tuple(name for name, _ in entries)
+    smarts = tuple(mol for _, mol in entries)
     return FunctionalGroupResources(smarts=smarts, smart2name=dict(zip(smarts, names)), embeddings=embeddings)
 
-@lru_cache(maxsize=2)
 def load_functional_group_resources(use_rxn_class: bool) -> FunctionalGroupResources:
-    return _load_functional_group_resources(bool(use_rxn_class))
+    cfg = get_functional_group_resource_config()
+    return _load_cached(bool(use_rxn_class), str(cfg.resource_root) if cfg.resource_root else None, str(cfg.root_dir) if cfg.root_dir else None)
 
 
 def get_functional_group_resources(use_rxn_class: bool) -> FunctionalGroupResources:

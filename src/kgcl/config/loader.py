@@ -11,45 +11,6 @@ from .validation import validate_config
 ENV_PREFIX = "KGCL_"
 
 
-def _parse_scalar(value: str) -> Any:
-    normalized = value.strip()
-    if normalized in {"", "null", "Null", "NULL", "~"}:
-        return None
-    if normalized in {"true", "True", "TRUE"}:
-        return True
-    if normalized in {"false", "False", "FALSE"}:
-        return False
-    try:
-        return int(normalized)
-    except ValueError:
-        pass
-    try:
-        return float(normalized)
-    except ValueError:
-        return normalized
-
-
-def _load_simple_yaml(text: str, path: str | os.PathLike[str]) -> Dict[str, Any]:
-    """Parse the flat scalar YAML subset used by bundled lightweight configs.
-
-    PyYAML remains the preferred parser for full YAML support.  This fallback
-    keeps defaults and tests readable in environments that have not installed
-    optional scientific/runtime dependencies yet.
-    """
-    data: Dict[str, Any] = {}
-    for line_no, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if ":" not in line or line.endswith("[") or "[" in line or "]" in line:
-            raise ValueError(f"Malformed configuration file {path}: line {line_no}: {raw_line}")
-        key, value = line.split(":", 1)
-        key = key.strip()
-        if not key:
-            raise ValueError(f"Malformed configuration file {path}: line {line_no}: {raw_line}")
-        data[key] = _parse_scalar(value)
-    return data
-
 
 def _coerce(name: str, value: Any) -> Any:
     if name in ALIASES:
@@ -82,29 +43,29 @@ def _flatten(prefix: str, data: Mapping[str, Any], out: Dict[str, Any]) -> None:
 
 
 def load_config_file(path: str | os.PathLike[str]) -> Dict[str, Any]:
-    text = Path(path).read_text()
-    try:
-        raw = json.loads(text)
-        if not isinstance(raw, Mapping):
-            raise json.JSONDecodeError("configuration root must be an object", text, 0)
-    except json.JSONDecodeError:
+    config_path = Path(path)
+    text = config_path.read_text()
+    if config_path.suffix.lower() == ".json":
         try:
-            import yaml
-        except ImportError as exc:  # pragma: no cover - exercised only without test extra
-            raw = _load_simple_yaml(text, path)
-            flat: Dict[str, Any] = {}
-            _flatten("", raw, flat)
-            return flat
+            raw = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Malformed configuration file {config_path}: {exc}") from exc
+    else:
+        import yaml
         try:
             raw = yaml.safe_load(text)
         except yaml.YAMLError as exc:
-            raise ValueError(f"Malformed configuration file {path}: {exc}") from exc
-        if raw is None:
-            raw = {}
-        if not isinstance(raw, Mapping):
-            raise ValueError("configuration root must be a mapping/object")
+            raise ValueError(f"Malformed configuration file {config_path}: {exc}") from exc
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"Malformed configuration file {config_path}: root must be a mapping/object")
     flat: Dict[str, Any] = {}
     _flatten("", raw, flat)
+    for key in flat:
+        mapped = ALIASES.get(key, key)
+        if mapped not in FIELD_TYPES:
+            raise ValueError(f"Unknown KGCL configuration key in {config_path}: {key}")
     return flat
 
 
@@ -131,6 +92,27 @@ def load_config(config_file: str | None = None, cli_overrides: Mapping[str, Any]
     validate_config(normalized)
     return KGCLConfig(**normalized)
 
+
+
+def parse_command_config(parser: argparse.ArgumentParser, argv: Sequence[str] | None, *, command_defaults: Mapping[str, Any] | None = None) -> KGCLConfig:
+    # Defaults live below config/env precedence; argparse defaults are not CLI overrides.
+    parsed = parser.parse_args(argv)
+    values = vars(parsed).copy()
+    config_file = values.pop("config_file", None)
+    overrides = {key: value for key, value in values.items() if value is not None}
+    if command_defaults:
+        base = DEFAULTS.to_dict()
+        base.update(command_defaults)
+        if config_file:
+            base.update(load_config_file(config_file))
+        env = os.environ
+        for name in list(base):
+            env_name = ENV_PREFIX + name.upper()
+            if env_name in env:
+                base[name] = env[env_name]
+        base.update(overrides)
+        return load_config(cli_overrides=base, environ={})
+    return load_config(config_file=config_file, cli_overrides=overrides)
 
 def add_config_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", dest="config_file", default=None, help="Optional KGCL YAML/JSON config file. Precedence: defaults < config < KGCL_* env < CLI.")

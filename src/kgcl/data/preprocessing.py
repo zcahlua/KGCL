@@ -1,8 +1,7 @@
-import argparse
 import sys
 import os
-from kgcl.config import add_arguments, add_config_argument, load_config
 from collections import Counter
+from collections.abc import Sequence
 from typing import Any, List
 
 import joblib
@@ -20,7 +19,11 @@ def check_edits(edits: List):
     return True
 
 
-def preprocessing(rxns: List, args: Any, rxn_classes: List = [], rxns_id=[]) -> None:
+def preprocessing(rxns: Sequence[str], args: Any, rxn_classes: Sequence[int] | None = None, rxns_id: Sequence[str] | None = None) -> None:
+    rxn_classes = [] if rxn_classes is None else list(rxn_classes)
+    rxns_id = [] if rxns_id is None else list(rxns_id)
+    if args.dataset == 'uspto_50k' and (len(rxn_classes) != len(rxns) or len(rxns_id) != len(rxns)):
+        raise ValueError('USPTO-50K preprocessing requires rxn_classes and rxn_ids for every reaction.')
     """
     preprocess reactions data to get edits
     """
@@ -58,7 +61,7 @@ def preprocessing(rxns: List, args: Any, rxn_classes: List = [], rxns_id=[]) -> 
             else:
                 rxn_data = generate_reaction_edits(
                     rxn_smi, kekulize=args.kekulize)
-        except:
+        except Exception as exc:
             print(f'Failed to extract reaction data, skipping reaction {idx}')
             print()
             sys.stdout.flush()
@@ -201,7 +204,3 @@ def run(args):
         preprocessing(rxns=df[rxn_key], args=args, rxn_classes=df['class'], rxns_id=df['id'])
     else:
         preprocessing(rxns=df[rxn_key], args=args)
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

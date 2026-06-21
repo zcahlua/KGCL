@@ -1,16 +1,13 @@
 import os
 import numpy as np
-import argparse
 import joblib
 from tqdm import tqdm
 from collections import Counter
 import torch
 from rdkit import Chem, RDLogger
-from kgcl.config import add_arguments, add_config_argument, load_config
 
 from models import KGCL, BeamSearch
 
-import sys
 
 lg = RDLogger.logger()
 lg.setLevel(4)
@@ -67,15 +64,13 @@ def canonicalize_smiles_clear_map(smiles, return_max_frag=True):
 
 
 def run(args):
-    from kgcl.config.paths import ProjectPaths, resolve_checkpoint
-    from kgcl.config.device import resolve_device
-    paths = ProjectPaths(args.root_dir)
-    device = resolve_device(args.device)
-    print(f"Resolved device: {device}")
-    test_file = paths.serialized_reactions_file(args.dataset, "test", args.kekulize)
-    test_data = joblib.load(test_file)
-    exp_dir = paths.experiment_dir(args.dataset, args.use_rxn_class, args.experiments)
-    checkpoint_path = resolve_checkpoint(paths, args.dataset, args.use_rxn_class, args.experiments, args.checkpoint)
+    from kgcl.evaluation.common import evaluation_setup
+    context = evaluation_setup(args, output_kind='standard')
+    paths = context.paths
+    device = context.device
+    test_data = joblib.load(context.test_data_path)
+    exp_dir = context.experiment_dir
+    checkpoint_path = context.checkpoint_path
     checkpoint = torch.load(checkpoint_path, map_location=device)
     config = checkpoint['saveables']
 
@@ -93,7 +88,7 @@ def run(args):
     beam_model = BeamSearch(model=model, step_beam_size=args.step_beam_size,
                             beam_size=args.beam_size, use_rxn_class=args.use_rxn_class)
     p_bar = tqdm(list(range(len(test_data))))
-    pred_file = str(paths.prediction_report(args.dataset, args.use_rxn_class, args.experiments, args.output_path))
+    pred_file = str(context.output_path)
 
 
     with open(pred_file, 'a') as fp:

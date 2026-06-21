@@ -1,30 +1,23 @@
-import argparse
+from kgcl.config.paths import ProjectPaths
 import sys
 import copy
-import os
-from kgcl.config import add_arguments, add_config_argument, load_config
 from typing import Any
 
-import joblib
-import torch
-from rdkit import Chem
-
-from utils.collate_fn import get_batch_graphs, prepare_edit_labels
-from utils.reaction_actions import Termination
-from utils.rxn_graphs import MolGraph, RxnGraph, Vocab
-
-
-from kgcl.chemistry.edit_application import apply_edit_to_mol
 
 def process_batch(batch_graphs, args):
+    import torch
+    from utils.rxn_graphs import MolGraph
     lengths = torch.tensor([len(graph_seq)
                            for graph_seq in batch_graphs], dtype=torch.long)
     max_length = max([len(graph_seq) for graph_seq in batch_graphs])
 
-    bond_vocab_file = os.path.join(args.root_dir, 'data', args.dataset, 'train', 'bond_vocab.txt')
-    atom_vocab_file = os.path.join(args.root_dir, 'data', args.dataset, 'train', 'atom_lg_vocab.txt')
-    bond_vocab = Vocab(joblib.load(bond_vocab_file))
-    atom_vocab = Vocab(joblib.load(atom_vocab_file))
+    import joblib
+    import torch
+    from utils.rxn_graphs import Vocab
+    from utils.collate_fn import get_batch_graphs, prepare_edit_labels
+    paths = ProjectPaths(args.root_dir)
+    bond_vocab = Vocab(joblib.load(paths.vocab_file(args.dataset, 'bond_vocab.txt')))
+    atom_vocab = Vocab(joblib.load(paths.vocab_file(args.dataset, 'atom_lg_vocab.txt')))
 
     graph_seq_tensors = []
     edit_seq_labels = []
@@ -57,19 +50,23 @@ def prepare_data(args: Any) -> None:
     """ 
     prepare data batches for edits prediction
     """
-    datafile = os.path.join(args.root_dir, 'data', args.dataset, args.mode, f'{args.mode}.file')
-    if args.kekulize:
-        datafile += '.kekulized'
+    import joblib
+    import torch
+    from rdkit import Chem
+    from utils.reaction_actions import Termination
+    from utils.rxn_graphs import RxnGraph
+    from kgcl.chemistry.edit_application import apply_edit_to_mol
+    paths = ProjectPaths(args.root_dir)
+    datafile = paths.serialized_reactions_file(args.dataset, args.mode, args.kekulize)
+    if not datafile.exists():
+        raise FileNotFoundError(f'Missing serialized reaction file: {datafile}')
     rxns_data = joblib.load(datafile)
 
     batch_graphs = []
     batch_num = 0
 
-    if args.use_rxn_class:
-        savedir = os.path.join(args.root_dir, 'data', args.dataset, args.mode, 'with_rxn_class')
-    else:
-        savedir = os.path.join(args.root_dir, 'data', args.dataset, args.mode, 'without_rxn_class')
-    os.makedirs(savedir, exist_ok=True)
+    savedir = paths.prepared_shard_dir(args.dataset, args.mode, args.use_rxn_class)
+    savedir.mkdir(parents=True, exist_ok=True)
 
     for idx, rxn_data in enumerate(rxns_data):
         graph_seq = []
@@ -100,7 +97,7 @@ def prepare_data(args: Any) -> None:
                 try:
                     pred_mol = edit_exe.apply(Chem.Mol(int_mol))
                     final_smi = Chem.MolToSmiles(pred_mol)
-                except Exception as e:
+                except Exception:
                     final_smi = None
             else:
                 graph = RxnGraph(prod_mol=Chem.Mol(int_mol), edit_to_apply=edit,
@@ -122,8 +119,7 @@ def prepare_data(args: Any) -> None:
 
         if (len(batch_graphs) % args.batch_size == 0) and len(batch_graphs):
             batch_tensors = process_batch(batch_graphs, args)
-            torch.save(batch_tensors, os.path.join(
-                savedir, f'batch-{batch_num}.pt'))
+            torch.save(batch_tensors, savedir / f'batch-{batch_num}.pt')
 
             batch_num += 1
             batch_graphs = []
@@ -134,17 +130,15 @@ def prepare_data(args: Any) -> None:
     if batch_graphs:
         batch_tensors = process_batch(batch_graphs, args)
         print("Saving..")
-        torch.save(batch_tensors, os.path.join(savedir, f'batch-{batch_num}.pt'))
+        torch.save(batch_tensors, savedir / f'batch-{batch_num}.pt')
     else:
         print("No remaining reactions to save.")
 
 
 def run(args):
+    from kgcl.resources.functional_groups import configure_functional_group_resources
+    configure_functional_group_resources(resource_root=getattr(args, 'resource_root', None), root_dir=getattr(args, 'root_dir', None))
     # Backward-compatible attribute names used by the original implementation.
     args.batch_size = args.preprocess_batch_size
     args.print_every = args.preprocess_print_every
     prepare_data(args=args)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

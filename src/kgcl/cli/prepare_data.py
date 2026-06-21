@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from kgcl.config import KGCLConfig, add_arguments, add_config_argument, load_config
+from kgcl.config import KGCLConfig, add_arguments, add_config_argument, parse_command_config
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -14,10 +14,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def parse_config(argv: Sequence[str] | None = None) -> KGCLConfig:
-    parsed = build_parser().parse_args(argv)
-    overrides = vars(parsed).copy()
-    config_file = overrides.pop('config_file')
-    return load_config(config_file=config_file, cli_overrides=overrides)
+    return parse_command_config(build_parser(), argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -1,7 +1,5 @@
 import os
 import numpy as np
-import argparse
-from kgcl.config import add_arguments, add_config_argument, load_config
 import joblib
 from tqdm import tqdm
 import torch
@@ -48,15 +46,13 @@ def smi_tokenizer(smi):
 
 
 def run(args):
-    from kgcl.config.paths import ProjectPaths, resolve_checkpoint
-    from kgcl.config.device import resolve_device
-    paths = ProjectPaths(args.root_dir)
-    device = resolve_device(args.device)
-    print(f"Resolved device: {device}")
-    test_file = paths.serialized_reactions_file(args.dataset, "test", args.kekulize)
-    test_data = joblib.load(test_file)
-    exp_dir = paths.experiment_dir(args.dataset, args.use_rxn_class, args.experiments)
-    checkpoint_path = resolve_checkpoint(paths, args.dataset, args.use_rxn_class, args.experiments, args.checkpoint)
+    from kgcl.evaluation.common import evaluation_setup
+    context = evaluation_setup(args, output_kind='round_trip_dir')
+    paths = context.paths
+    device = context.device
+    test_data = joblib.load(context.test_data_path)
+    exp_dir = context.experiment_dir
+    checkpoint_path = context.checkpoint_path
     checkpoint = torch.load(checkpoint_path, map_location=device)
     config = checkpoint['saveables']
 
@@ -71,7 +67,9 @@ def run(args):
     p_bar = tqdm(list(range(len(test_data))))
 
     # Load the forward model prediction results
-    pred_text = str(paths.forward_prediction_input(args.dataset, args.use_rxn_class, args.experiments, args.forward_predictions_path))
+    pred_text = paths.forward_prediction_input(args.dataset, args.use_rxn_class, args.experiments, args.forward_predictions_path)
+    if not pred_text.exists():
+        raise FileNotFoundError(f'Forward prediction file not found: {pred_text}')
     with open(pred_text, 'r') as f:
         targets = [''.join(line.strip().split(' ')) for line in f.readlines()]
 
@@ -89,7 +87,7 @@ def run(args):
         r_smi = Chem.MolToSmiles(r_mol)
         r_set = set(r_smi.split('.'))
 
-        out_dir = paths.round_trip_prediction_dir(args.dataset, args.use_rxn_class, args.experiments, args.output_path); out_dir.mkdir(parents=True, exist_ok=True); pred_text = str(out_dir / f'{idx}.txt')
+        pred_text = str(context.output_path / f'{idx}.txt')
 
         with torch.no_grad():
             top_k_results = beam_model.run_search(prod_smi=p, max_steps=args.max_steps, rxn_class=rxn_class)
