@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Mapping, Any
+from .device import is_valid_device_request
 
 
 def validate_config(values: Mapping[str, Any]) -> None:
@@ -23,8 +24,15 @@ def validate_config(values: Mapping[str, Any]) -> None:
         errors.append("factor must be greater than 0 and at most 1")
     if float(values.get("thresh", 0.0)) < 0:
         errors.append("thresh must be non-negative")
-    for name in ("train_batch_size", "preprocess_batch_size", "beam_size", "full_beam_size", "step_beam_size"):
+    for name in ("preprocess_batch_size", "beam_size", "full_beam_size", "step_beam_size"):
         if int(values.get(name, 0)) < 1:
             errors.append(f"{name} must be at least 1")
+    if int(values.get("train_batch_size", 0)) != 1:
+        errors.append("train_batch_size is deprecated and must equal 1; use preprocess_batch_size for reaction shard size")
+    if not is_valid_device_request(str(values.get("device", ""))):
+        errors.append("device must be one of: auto, cpu, cuda, cuda:<index>")
+    for name in ("checkpoint", "output_path", "forward_predictions_path", "resource_root"):
+        if values.get(name) is not None and str(values.get(name)).strip() == "":
+            errors.append(f"{name} must be non-empty when supplied")
     if errors:
         raise ValueError("Invalid KGCL configuration:\n- " + "\n- ".join(errors))

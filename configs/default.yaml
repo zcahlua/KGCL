@@ -2,6 +2,7 @@
 dataset: uspto_50k
 mode: train
 root_dir: ./
+resource_root: null
 experiments: BEST
 use_rxn_class: false
 kekulize: true

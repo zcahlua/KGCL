@@ -11,6 +11,7 @@ class KGCLConfig:
     dataset: str = "uspto_50k"
     mode: str = "train"
     root_dir: str = "./"
+    resource_root: str | None = None
     experiments: str = "BEST"
     use_rxn_class: bool = False
     kekulize: bool = True
@@ -59,12 +60,14 @@ FIELD_TYPES["lr"] = float
 FIELD_TYPES["checkpoint"] = str
 FIELD_TYPES["output_path"] = str
 FIELD_TYPES["forward_predictions_path"] = str
+FIELD_TYPES["resource_root"] = str
 DEFAULTS = KGCLConfig()
 
 PARAMETER_HELP = {
     "dataset": "Dataset name, normalized to lowercase (for example uspto_50k or uspto_full).",
     "mode": "Dataset split/workflow mode: train, valid, or test.",
     "root_dir": "Repository/workflow root used to resolve data and experiment paths.",
+    "resource_root": "Optional root containing external immutable KGembedding/ and KGembedding_2/ resource directories.",
     "experiments": "Experiment/checkpoint directory name used by evaluation commands.",
     "use_rxn_class": "Whether reaction classes are included as model/input conditions.",
     "kekulize": "Whether preprocessing kekulizes molecules.",
@@ -82,7 +85,7 @@ PARAMETER_HELP = {
     "factor": "ReduceLROnPlateau multiplicative decay factor.",
     "thresh": "ReduceLROnPlateau absolute improvement threshold.",
     "max_clip": "Maximum gradient norm for clipping.",
-    "train_batch_size": "Training DataLoader batch size; current default preserves historical behavior.",
+    "train_batch_size": "Deprecated compatibility option; prepared shard DataLoader batch size must remain 1.",
     "preprocess_batch_size": "Number of reactions per serialized preprocessing shard.",
     "beam_size": "Beam-search width for standard evaluation.",
     "full_beam_size": "Beam-search width for USPTO-FULL evaluation script.",
