@@ -14,6 +14,15 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
+dev = ["pytest>=7", "build", "ruff"]
+runtime = [
+  "numpy==1.26.4",
+  "pandas",
+  "joblib",
+  "tqdm",
+  "torch==2.2.2",
+  "rdkit==2024.3.4",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -24,11 +33,11 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [project.scripts]
-kgcl-train = "kgcl.cli.entrypoints:train"
-kgcl-preprocess = "kgcl.cli.entrypoints:preprocess"
-kgcl-prepare-data = "kgcl.cli.entrypoints:prepare_data"
-kgcl-eval = "kgcl.cli.entrypoints:evaluate"
-kgcl-eval-full = "kgcl.cli.entrypoints:evaluate_full"
-kgcl-eval-rtacc = "kgcl.cli.entrypoints:evaluate_round_trip"
-kgcl-canonicalize = "kgcl.cli.entrypoints:canonicalize"
+kgcl-train = "kgcl.cli.train:main"
+kgcl-preprocess = "kgcl.cli.preprocess:main"
+kgcl-prepare-data = "kgcl.cli.prepare_data:main"
+kgcl-eval = "kgcl.cli.evaluate:main"
+kgcl-eval-full = "kgcl.cli.evaluate_full:main"
+kgcl-eval-rtacc = "kgcl.cli.evaluate_round_trip:main"
+kgcl-canonicalize = "kgcl.cli.canonicalize:main"
 

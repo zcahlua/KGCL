@@ -6,24 +6,44 @@ on:
     branches: [main]
 
 jobs:
-  config-and-cli:
+  lightweight:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install lightweight test dependencies
-        run: python -m pip install -e '.[test]'
-      - name: Run config and CLI tests
-        run: python -m pytest tests/smoke tests/unit
+      - name: Install lightweight dependencies
+        run: python -m pip install -e '.[test,dev]'
+      - name: Run unit, smoke, and compatibility tests
+        run: python -m pytest tests/unit tests/smoke tests/compatibility
+      - name: Ruff check
+        run: ruff check src/kgcl tests || true
       - name: Compile package
         run: python -m compileall src
+      - name: Build wheel
+        run: python -m build
       - name: Check lightweight help
         run: |
           python train.py --help
           python preprocess.py --help
           python prepare_data.py --help
+          python canonicalize_prod.py --help
           python eval.py --help
           python eval-full.py --help
           python eval-rtacc.py --help
+
+  runtime-smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install runtime dependencies
+        run: python -m pip install -e '.[runtime,test]'
+      - name: Runtime import and compatibility tests
+        run: |
+          python -c "import kgcl, models, utils"
+          python -m pytest tests/compatibility

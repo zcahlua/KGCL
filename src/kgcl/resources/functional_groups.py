@@ -19,13 +19,15 @@ class FunctionalGroupResourcePaths:
     embeddings: Path
 
 
-def _candidate_roots(resource_root: Path | None = None) -> list[Path]:
+def _candidate_roots(resource_root: Path | None = None, root_dir: Path | None = None) -> list[Path]:
     if resource_root is not None:
         return [Path(resource_root).expanduser()]
     env_root = os.environ.get("KGCL_RESOURCE_ROOT")
     if env_root:
         return [Path(env_root).expanduser()]
     roots: list[Path] = []
+    if root_dir is not None:
+        roots.append(Path(root_dir).expanduser())
     # src/kgcl/resources/functional_groups.py -> repo root is parents[3]
     roots.append(Path(__file__).resolve().parents[3])
     # Installed-data location placeholder: if a distribution installs external
@@ -39,6 +41,7 @@ def resolve_functional_group_resources(
     *,
     use_rxn_class: bool,
     resource_root: Path | None = None,
+    root_dir: Path | None = None,
 ) -> FunctionalGroupResourcePaths:
     """Return paths for one immutable functional-group resource bundle.
 
@@ -48,7 +51,7 @@ def resolve_functional_group_resources(
     """
     directory_name = "KGembedding_2" if use_rxn_class else "KGembedding"
     attempted: list[tuple[Path, Path]] = []
-    for root in _candidate_roots(resource_root):
+    for root in _candidate_roots(resource_root, root_dir):
         bundle_dir = root / directory_name
         definitions = bundle_dir / "funcgroup.txt"
         embeddings = bundle_dir / "fg2emb.pkl"

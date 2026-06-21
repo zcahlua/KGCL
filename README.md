@@ -117,3 +117,12 @@ This will display the round-trip accuracy results for reaction class unknown set
 python eval-full.py
 ```
 This will display the exact accuracy results for reaction class unknown setting
+## Refactored command architecture
+
+Install lightweight tooling with `pip install -e ".[test,dev]"`. A full source-checkout runtime should use `pip install -e ".[runtime,test]"` and keep the external immutable research resources `KGembedding/` and `KGembedding_2/` available in the checkout, or pass `--resource-root` / set `KGCL_RESOURCE_ROOT`.
+
+Console commands map directly to one parser per command: `kgcl-train`, `kgcl-preprocess`, `kgcl-prepare-data`, `kgcl-canonicalize`, `kgcl-eval`, `kgcl-eval-full`, and `kgcl-eval-rtacc`. Root scripts remain compatible wrappers.
+
+Evaluation checkpoint paths are resolved with `--checkpoint` when supplied, otherwise historical defaults under `experiments/<dataset>/<class-mode>/<experiment>` are used. `--kekulize` selects `.file.kekulized`; `--no-kekulize` selects `.file`.
+
+`train_batch_size` is deprecated and must remain `1` because each prepared dataset item is already a serialized shard. Use `preprocess_batch_size` to control reactions per prepared shard.
