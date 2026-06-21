@@ -19,3 +19,11 @@
 - Do not change scientific algorithms, checkpoint formats, prediction output formats, or public commands without compatibility handling.
 - Prefer compatibility shims over breaking import paths.
 - Do not manually edit generated data under `data/` or generated experiment outputs under `experiments/` except when intentionally updating examples.
+
+## Refactor conventions
+
+- Root workflow scripts are compatibility wrappers; put parser/config changes in `src/kgcl/cli` and reusable path policy in `src/kgcl/config`.
+- Keep help parsing lightweight: `--help` must not require PyTorch, RDKit, pandas, NumPy, or joblib.
+- Historical imports under `models.*` and `utils.*` are serialization compatibility surfaces; keep them installable and avoid renaming checkpoint/joblib classes.
+- Functional-group embedding files are package resources under `src/kgcl/resources/functional_groups`; load them with `importlib.resources` and do not depend on the current working directory.
+- Generated outputs (`build/`, `dist/`, caches, generated prediction files, generated preprocessing shards) should remain untracked unless deliberately added as reference artifacts.

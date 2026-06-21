@@ -17,8 +17,18 @@ test = ["pytest>=7"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["kgcl*"]
+include = ["kgcl*", "models*", "utils*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[project.scripts]
+kgcl-train = "kgcl.cli.entrypoints:train"
+kgcl-preprocess = "kgcl.cli.entrypoints:preprocess"
+kgcl-prepare-data = "kgcl.cli.entrypoints:prepare_data"
+kgcl-eval = "kgcl.cli.entrypoints:evaluate"
+kgcl-eval-full = "kgcl.cli.entrypoints:evaluate_full"
+kgcl-eval-rtacc = "kgcl.cli.entrypoints:evaluate_round_trip"
+kgcl-canonicalize = "kgcl.cli.entrypoints:canonicalize"
+

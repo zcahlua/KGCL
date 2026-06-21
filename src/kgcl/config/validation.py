@@ -23,7 +23,7 @@ def validate_config(values: Mapping[str, Any]) -> None:
         errors.append("factor must be greater than 0 and at most 1")
     if float(values.get("thresh", 0.0)) < 0:
         errors.append("thresh must be non-negative")
-    for name in ("train_batch_size", "preprocess_batch_size", "beam_size", "full_beam_size"):
+    for name in ("train_batch_size", "preprocess_batch_size", "beam_size", "full_beam_size", "step_beam_size"):
         if int(values.get(name, 0)) < 1:
             errors.append(f"{name} must be at least 1")
     if errors:
