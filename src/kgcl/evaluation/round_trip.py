@@ -50,7 +50,7 @@ def run(args):
     # Import only after functional-group resources are configured.
     from models import KGCL, BeamSearch
     paths = context.paths
-    device = context.device
+    device = context.cuda.torch_device
     test_data = joblib.load(context.test_data_path)
     checkpoint_path = context.checkpoint_path
     checkpoint = torch.load(checkpoint_path, map_location=device)
