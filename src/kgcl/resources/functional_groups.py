@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import os
-from contextlib import contextmanager
-from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -71,14 +69,3 @@ def resolve_functional_group_resources(*, use_rxn_class: bool, resource_root: Pa
     rd = _normalize(root_dir) or cfg.root_dir
     env = os.environ.get('KGCL_RESOURCE_ROOT')
     return _resolve_cached(bool(use_rxn_class), str(rr) if rr else None, str(rd) if rd else None, str(_normalize(env)) if env and rr is None else None)
-
-
-@contextmanager
-def functional_group_resource_context(*, resource_root: str | Path | None, root_dir: str | Path | None) -> Iterator[FunctionalGroupResourceConfig]:
-    """Temporarily configure functional-group resources and restore prior state."""
-    previous = get_functional_group_resource_config()
-    configure_functional_group_resources(resource_root=resource_root, root_dir=root_dir)
-    try:
-        yield get_functional_group_resource_config()
-    finally:
-        configure_functional_group_resources(resource_root=previous.resource_root, root_dir=previous.root_dir)

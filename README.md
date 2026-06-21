@@ -93,33 +93,3 @@ python -m pytest tests/runtime -q
 python -m compileall src
 ruff check src/kgcl tests
 ```
-
-
-## CUDA-only model execution
-
-KGCL training and evaluation execute models on NVIDIA CUDA only. `train.py`, `eval.py`, `eval-full.py`, and `eval-rtacc.py` accept `--device cuda` or `--device cuda:<visible-index>` such as `cuda:0`; `cpu`, `auto`, and silent CPU fallback are not supported for model execution. Canonicalization, preprocessing, and data preparation remain CPU-capable because they do not execute the model.
-
-`CUDA_VISIBLE_DEVICES` controls the visible CUDA indices, so `--device cuda:0` selects the first visible GPU after that environment filter. Verify CUDA before running model commands:
-
-```bash
-nvidia-smi
-python -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available())"
-```
-
-Install the tested CUDA PyTorch wheel before installing KGCL runtime dependencies:
-
-```bash
-python -m pip install torch==2.2.2 --index-url https://download.pytorch.org/whl/cu121
-python -m pip install -e ".[runtime,test,dev]"
-```
-
-The CUDA workflow targets PyTorch 2.2.2 with CUDA 12.1 wheels on a self-hosted NVIDIA GPU runner; use an NVIDIA driver compatible with CUDA 12.1 or newer. Example model commands:
-
-```bash
-python train.py --device cuda:0 --dataset uspto_50k
-python eval.py --device cuda:0 --dataset uspto_50k
-python eval-full.py --device cuda:0 --dataset uspto_full
-python eval-rtacc.py --device cuda:0 --dataset uspto_50k
-```
-
-Configuration files are flat YAML or JSON mappings. Nested sections are rejected to avoid ambiguous collisions; write `device: cuda:0` instead of `training: {device: cuda:0}`.
