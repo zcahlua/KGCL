@@ -31,7 +31,7 @@ include = ["kgcl*", "models*", "utils*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-markers = ["runtime: tests requiring scientific runtime dependencies"]
+markers = ["runtime: tests requiring scientific runtime dependencies", "cuda: tests requiring a real NVIDIA CUDA device"]
 
 [project.scripts]
 kgcl-train = "kgcl.cli.train:main"
