@@ -4,10 +4,12 @@ the correspondence to the original atom-mapped order. This correspondence is the
 used to renumber the reactant atoms.
 """
 from rdkit import Chem
-import os
 import pandas as pd
 
 from tqdm import tqdm
+
+from kgcl.config import KGCLConfig
+from kgcl.config.paths import ProjectPaths
 
 def canonicalize_prod(p):
     import copy
@@ -27,7 +29,7 @@ def canonicalize_prod(p):
 def canonicalize(smiles):
     try:
         tmp = Chem.MolFromSmiles(smiles)
-    except:
+    except Exception:
         print('no mol', flush=True)
         return smiles
     if tmp is None:
@@ -114,12 +116,15 @@ def remap_rxn_smi(rxn_smi):
     return rxn_smi_new, correspondence
 
 
-def run(args):
+def run(args: KGCLConfig):
     args.dataset = args.dataset.lower()
-    datadir = os.path.join(args.root_dir, 'data', args.dataset)
-    new_file = f'canonicalized_{args.mode}.csv'
-    filename = f'raw_{args.mode}.csv'
-    df = pd.read_csv(os.path.join(datadir, filename))
+    paths = ProjectPaths(args.root_dir)
+    input_csv = paths.raw_csv(args.dataset, args.mode)
+    output_csv = paths.canonicalized_csv(args.dataset, args.mode)
+    if not input_csv.exists():
+        raise FileNotFoundError(f'Raw input CSV not found: {input_csv}')
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    df = pd.read_csv(input_csv)
     print(f"Processing file of size: {len(df)}")
 
     if args.dataset == 'uspto_50k':
@@ -141,4 +146,4 @@ def run(args):
         new_dict['reactants>reagents>production'].append(rxn_smi_new)
 
     new_df = pd.DataFrame.from_dict(new_dict)
-    new_df.to_csv(os.path.join(datadir, new_file), index=False)
+    new_df.to_csv(output_csv, index=False)

@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import joblib
 from tqdm import tqdm
@@ -6,7 +5,6 @@ from collections import Counter
 import torch
 from rdkit import Chem, RDLogger
 
-from models import KGCL, BeamSearch
 lg = RDLogger.logger()
 lg.setLevel(4)
 
@@ -14,10 +12,11 @@ lg.setLevel(4)
 def run(args):
     from kgcl.evaluation.common import evaluation_setup
     context = evaluation_setup(args, output_kind='full')
-    paths = context.paths
+
+    # Import only after functional-group resources are configured.
+    from models import KGCL, BeamSearch
     device = context.device
     test_data = joblib.load(context.test_data_path)
-    exp_dir = context.experiment_dir
     checkpoint_path = context.checkpoint_path
     checkpoint = torch.load(checkpoint_path, map_location=device)
     config = checkpoint['saveables']

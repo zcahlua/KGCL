@@ -1,11 +1,9 @@
-import os
 import numpy as np
 import joblib
 from tqdm import tqdm
 import torch
 from rdkit import Chem, RDLogger
 
-from models import KGCL, BeamSearch
 
 lg = RDLogger.logger()
 lg.setLevel(4)
@@ -15,7 +13,7 @@ lg.setLevel(4)
 def canonicalize(smi):
     try:
         mol = Chem.MolFromSmiles(smi)
-    except:
+    except Exception:
         print('no mol', flush=True)
         return smi
     if mol is None:
@@ -48,10 +46,12 @@ def smi_tokenizer(smi):
 def run(args):
     from kgcl.evaluation.common import evaluation_setup
     context = evaluation_setup(args, output_kind='round_trip_dir')
+
+    # Import only after functional-group resources are configured.
+    from models import KGCL, BeamSearch
     paths = context.paths
     device = context.device
     test_data = joblib.load(context.test_data_path)
-    exp_dir = context.experiment_dir
     checkpoint_path = context.checkpoint_path
     checkpoint = torch.load(checkpoint_path, map_location=device)
     config = checkpoint['saveables']

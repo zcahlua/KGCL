@@ -31,9 +31,9 @@ def run_training(config):
 
     import sys
     import joblib
-    import torch
     from rdkit import RDLogger
     from torch.optim import Adam, lr_scheduler
+    # Import only after functional-group resources are configured.
     from models import KGCL
     from models.model_utils import CSVLogger
     from utils.datasets import RetroEditDataset, RetroEvalDataset
@@ -44,8 +44,10 @@ def run_training(config):
 
     RDLogger.logger().setLevel(RDLogger.CRITICAL)
     device = resolve_device(args.get('device', 'auto'))
-    if args.get('lr') is None and args['dataset'] == 'uspto_50k': args['lr'] = 0.001
-    elif args.get('lr') is None and args['dataset'] == 'uspto_full': args['lr'] = 0.0001
+    if args.get('lr') is None and args['dataset'] == 'uspto_50k':
+        args['lr'] = 0.001
+    elif args.get('lr') is None and args['dataset'] == 'uspto_full':
+        args['lr'] = 0.0001
 
     run_started_at = datetime.now()
     out_dir = paths.experiment_dir(args['dataset'], args.get('use_rxn_class', False), run_started_at.strftime('%d-%m-%Y--%H-%M-%S'))

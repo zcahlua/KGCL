@@ -7,7 +7,7 @@ from utils.mol_features import get_atom_features, get_bond_features
 import torch
 import torch.nn.functional as F
 import math
-from kgcl.resources.functional_groups import get_functional_group_resource_config, resolve_functional_group_resources
+from kgcl.resources.functional_groups import resolve_functional_group_resources
 
 @dataclass(frozen=True)
 class FunctionalGroupResources:
@@ -28,34 +28,35 @@ def load_embedding_mapping(path):
     return data
 
 @lru_cache(maxsize=8)
-def _load_cached(use_rxn_class: bool, resource_root_key: str | None, root_dir_key: str | None) -> FunctionalGroupResources:
-    paths = resolve_functional_group_resources(
-        use_rxn_class=use_rxn_class,
-        resource_root=Path(resource_root_key) if resource_root_key else None,
-        root_dir=Path(root_dir_key) if root_dir_key else None,
-    )
+def _load_cached(use_rxn_class: bool, definitions_path: str, embeddings_path: str) -> FunctionalGroupResources:
+    definitions = Path(definitions_path)
+    embeddings_path_obj = Path(embeddings_path)
     entries = []
-    for line_no, raw in enumerate(paths.definitions.read_text().splitlines(), start=1):
+    for line_no, raw in enumerate(definitions.read_text().splitlines(), start=1):
         if not raw.strip():
             continue
         parts = raw.split()
         if len(parts) < 2:
-            raise ValueError(f"Malformed functional-group definition {paths.definitions}:{line_no}: {raw}")
+            raise ValueError(f"Malformed functional-group definition {definitions}:{line_no}: {raw}")
         mol = Chem.MolFromSmarts(parts[1])
         if mol is None:
-            raise ValueError(f"Could not parse SMARTS in {paths.definitions}:{line_no}: {parts[1]}")
+            raise ValueError(f"Could not parse SMARTS in {definitions}:{line_no}: {parts[1]}")
         entries.append((parts[0], mol))
-    embeddings = load_embedding_mapping(paths.embeddings)
+    embeddings = load_embedding_mapping(embeddings_path_obj)
     missing = [name for name, _ in entries if name not in embeddings]
     if missing:
-        raise ValueError(f"Functional-group definitions in {paths.definitions} are missing embedding keys in {paths.embeddings}: {missing[:5]}")
+        raise ValueError(f"Functional-group definitions in {definitions} are missing embedding keys in {embeddings_path_obj}: {missing[:5]}")
     names = tuple(name for name, _ in entries)
     smarts = tuple(mol for _, mol in entries)
     return FunctionalGroupResources(smarts=smarts, smart2name=dict(zip(smarts, names)), embeddings=embeddings)
 
 def load_functional_group_resources(use_rxn_class: bool) -> FunctionalGroupResources:
-    cfg = get_functional_group_resource_config()
-    return _load_cached(bool(use_rxn_class), str(cfg.resource_root) if cfg.resource_root else None, str(cfg.root_dir) if cfg.root_dir else None)
+    paths = resolve_functional_group_resources(use_rxn_class=use_rxn_class)
+    return _load_cached(bool(use_rxn_class), str(paths.definitions), str(paths.embeddings))
+
+
+def clear_functional_group_resource_cache() -> None:
+    _load_cached.cache_clear()
 
 
 def get_functional_group_resources(use_rxn_class: bool) -> FunctionalGroupResources:

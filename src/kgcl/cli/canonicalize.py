@@ -10,7 +10,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Canonicalize KGCL reaction CSV files')
     add_config_argument(parser)
     add_arguments(parser, ['dataset', 'root_dir', 'mode'])
-    parser.set_defaults(dataset='uspto_full', mode='test')
     return parser
 
 

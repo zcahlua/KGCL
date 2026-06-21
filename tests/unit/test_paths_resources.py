@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from kgcl.config.paths import ProjectPaths, historical_checkpoint_name, resolve_checkpoint
 

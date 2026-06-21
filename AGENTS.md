@@ -25,7 +25,7 @@
 - Root workflow scripts are compatibility wrappers; put parser/config changes in `src/kgcl/cli` and reusable path policy in `src/kgcl/config`.
 - Keep help parsing lightweight: `--help` must not require PyTorch, RDKit, pandas, NumPy, or joblib.
 - Historical imports under `models.*` and `utils.*` are serialization compatibility surfaces; keep them installable and avoid renaming checkpoint/joblib classes.
-- Functional-group embedding files are package resources under `src/kgcl/resources/functional_groups`; load them with `importlib.resources` and do not depend on the current working directory.
+- Functional-group embeddings are external immutable research resources; source checkouts infer their location, while installed workflows require `--resource-root` or `KGCL_RESOURCE_ROOT`. Configure resources before importing model/graph modules.
 - Generated outputs (`build/`, `dist/`, caches, generated prediction files, generated preprocessing shards) should remain untracked unless deliberately added as reference artifacts.
 
 ## Structural refactor rules

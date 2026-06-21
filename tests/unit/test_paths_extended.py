@@ -1,4 +1,3 @@
-from pathlib import Path
 from kgcl.config.paths import ProjectPaths
 
 

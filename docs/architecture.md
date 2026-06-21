@@ -1,9 +1,13 @@
 # KGCL architecture
 
-KGCL uses a `src/` layout. Command modules in `src/kgcl/cli` own the single authoritative parser for each command and defer scientific imports until after parsing. Root scripts are compatibility wrappers that insert `src/` and call the matching CLI module.
+KGCL keeps scientific implementations under `src/models/` and `src/utils/`. Root `models/` and `utils/` packages are source-checkout shims for historical imports and serialized objects.
 
-Canonical serialization-sensitive implementations remain in historical packages `src/models` and `src/utils` so existing checkpoints and joblib objects continue to import names such as `models.KGCL` and `utils.generate_edits.ReactionData`. Root `models/` and `utils/` are source-checkout shims only. `kgcl.models` is a public facade over those historical modules.
+Directory tree: root wrappers (`train.py`, `preprocess.py`, `prepare_data.py`, `canonicalize_prod.py`, `eval*.py`) call `src/kgcl/cli/`; parsers load `src/kgcl/config/`; runtime work lives in `src/kgcl/data/`, `src/kgcl/training/`, and `src/kgcl/evaluation/`; reusable path policy lives in `src/kgcl/config/paths.py`; functional-group resource resolution lives in `src/kgcl/resources/functional_groups.py`.
 
-Workflow implementation lives in `kgcl.training`, `kgcl.data`, `kgcl.chemistry`, and `kgcl.evaluation`. Path and checkpoint construction is centralized in `kgcl.config.paths`; runtime devices are resolved by `kgcl.config.device`.
+CLI modules are lightweight and must not import PyTorch, RDKit, pandas, joblib, `models`, or `utils` before parsing. Runtime modules configure functional-group resources first, then import `models` and graph utilities. This prevents stale or wrong resource roots.
 
-Functional-group embedding binaries are externally located immutable research resources in `KGembedding/` and `KGembedding_2/`. They are not packaged in wheels. Source checkouts are discovered automatically; installed workflows should pass `--resource-root` or set `KGCL_RESOURCE_ROOT`.
+`ProjectPaths` resolves the workflow root once and constructs data, vocabulary, prepared shard, experiment, checkpoint, and prediction paths without duplicating relative roots.
+
+Configuration precedence is schema defaults, command defaults, config file, environment, then CLI. Checkpoint names and state keys are compatibility surfaces and must remain unchanged. Binary assets, including checkpoints, embeddings, joblib files, arrays, images, PDFs, archives, and generated shards, are immutable.
+
+Testing layers: unit tests cover configuration, paths, resource cache, validation, and docs; smoke tests cover command help; compatibility tests cover historical imports and binary hashes; runtime tests exercise real scientific dependencies and resources; wheel checks verify installed console scripts.
