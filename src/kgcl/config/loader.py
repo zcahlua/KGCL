@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Sequence
 
 from .schema import ALIASES, DEFAULTS, FIELD_TYPES, KGCLConfig, PARAMETER_HELP
-from .validation import ConfigScope, validate_config
+from .validation import validate_config
 
 ENV_PREFIX = "KGCL_"
 
@@ -34,22 +34,12 @@ def _coerce(name: str, value: Any) -> Any:
     return value
 
 
-def _reject_nested(prefix: str, data: Mapping[str, Any]) -> None:
-    nested = []
+def _flatten(prefix: str, data: Mapping[str, Any], out: Dict[str, Any]) -> None:
     for key, value in data.items():
-        path = f"{prefix}.{key}" if prefix else str(key)
         if isinstance(value, Mapping):
-            if value:
-                nested.extend(f"{path}.{child}" for child in value)
-            else:
-                nested.append(path)
-    if nested:
-        found = ", ".join(nested)
-        first = nested[0]
-        raise ValueError(
-            "Nested configuration sections are not supported by the current KGCL flat schema. "
-            f"Found nested key: {found}. Use flat keys such as {first.split('.')[-1]}: <value>."
-        )
+            _flatten(key, value, out)
+        else:
+            out[key] = value
 
 
 def load_config_file(path: str | os.PathLike[str]) -> Dict[str, Any]:
@@ -70,8 +60,8 @@ def load_config_file(path: str | os.PathLike[str]) -> Dict[str, Any]:
         raw = {}
     if not isinstance(raw, Mapping):
         raise ValueError(f"Malformed configuration file {config_path}: root must be a mapping/object")
-    _reject_nested("", raw)
-    flat: Dict[str, Any] = dict(raw)
+    flat: Dict[str, Any] = {}
+    _flatten("", raw, flat)
     for key in flat:
         mapped = ALIASES.get(key, key)
         if mapped not in FIELD_TYPES:
@@ -79,7 +69,7 @@ def load_config_file(path: str | os.PathLike[str]) -> Dict[str, Any]:
     return flat
 
 
-def load_config(config_file: str | None = None, cli_overrides: Mapping[str, Any] | None = None, environ: Mapping[str, str] | None = None, *, scope: ConfigScope | None = None) -> KGCLConfig:
+def load_config(config_file: str | None = None, cli_overrides: Mapping[str, Any] | None = None, environ: Mapping[str, str] | None = None) -> KGCLConfig:
     values = DEFAULTS.to_dict()
     if config_file:
         values.update(load_config_file(config_file))
@@ -99,12 +89,12 @@ def load_config(config_file: str | None = None, cli_overrides: Mapping[str, Any]
             raise ValueError(f"Unknown KGCL configuration key: {key}")
         normalized[mapped] = _coerce(mapped, value)
     normalized["dataset"] = str(normalized["dataset"]).strip().lower()
-    validate_config(normalized, scope=scope)
+    validate_config(normalized)
     return KGCLConfig(**normalized)
 
 
 
-def parse_command_config(parser: argparse.ArgumentParser, argv: Sequence[str] | None, *, command_defaults: Mapping[str, Any] | None = None, scope: ConfigScope | None = None) -> KGCLConfig:
+def parse_command_config(parser: argparse.ArgumentParser, argv: Sequence[str] | None, *, command_defaults: Mapping[str, Any] | None = None) -> KGCLConfig:
     # Defaults live below config/env precedence; argparse defaults are not CLI overrides.
     parsed = parser.parse_args(argv)
     values = vars(parsed).copy()
@@ -121,8 +111,8 @@ def parse_command_config(parser: argparse.ArgumentParser, argv: Sequence[str] | 
             if env_name in env:
                 base[name] = env[env_name]
         base.update(overrides)
-        return load_config(cli_overrides=base, environ={}, scope=scope)
-    return load_config(config_file=config_file, cli_overrides=overrides, scope=scope)
+        return load_config(cli_overrides=base, environ={})
+    return load_config(config_file=config_file, cli_overrides=overrides)
 
 def add_config_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", dest="config_file", default=None, help="Optional KGCL YAML/JSON config file. Precedence: defaults < config < KGCL_* env < CLI.")

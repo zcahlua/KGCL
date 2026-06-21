@@ -45,7 +45,7 @@ class KGCLConfig:
     num_workers: int = 24
     print_every: int = 200
     preprocess_print_every: int = 1000
-    device: str = "cuda"
+    device: str = "auto"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -97,5 +97,5 @@ PARAMETER_HELP = {
     "num_workers": "DataLoader worker processes.",
     "print_every": "Training progress print interval.",
     "preprocess_print_every": "Preprocessing progress print interval.",
-    "device": "CUDA device used for all model execution. CPU and automatic fallback are not supported. Examples: cuda, cuda:0, cuda:1.",
+    "device": "Runtime device: auto, cpu, cuda, or cuda device string.",
 }

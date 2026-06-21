@@ -1,10 +1,11 @@
 import pytest
 
-from kgcl.config import ConfigScope, load_config
+from kgcl.config import KGCLConfig
+from kgcl.training.runner import run_training
 
 pytestmark = pytest.mark.runtime
 
 
-def test_training_scope_accepts_cuda_syntax_without_resolving_gpu():
-    cfg = load_config(cli_overrides={'device': 'cuda:0'}, environ={}, scope=ConfigScope.TRAIN)
-    assert cfg.device == 'cuda:0'
+def test_training_rejects_unsupported_batch_size_before_imports(tmp_path):
+    with pytest.raises(ValueError, match="train_batch_size"):
+        run_training(KGCLConfig(root_dir=str(tmp_path), train_batch_size=2))
