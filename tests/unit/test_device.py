@@ -1,4 +1,6 @@
-import sys, types, pytest
+import sys
+import types
+import pytest
 from kgcl.config.device import is_valid_device_request, resolve_device
 
 

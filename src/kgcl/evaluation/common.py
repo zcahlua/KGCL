@@ -32,10 +32,12 @@ def evaluation_setup(config, *, output_kind='standard', default_name='pred_resul
     device = resolve_device(config.device)
     checkpoint = resolve_checkpoint(paths, config.dataset, config.use_rxn_class, config.experiments, config.checkpoint)
     data_file = paths.serialized_reactions_file(config.dataset, 'test', config.kekulize)
-    if not data_file.exists(): raise FileNotFoundError(f'Test data file not found: {data_file}')
+    if not data_file.exists():
+        raise FileNotFoundError(f'Test data file not found: {data_file}')
     exp_dir = paths.experiment_dir(config.dataset, config.use_rxn_class, config.experiments)
     if output_kind == 'round_trip_dir':
-        output = paths.round_trip_prediction_dir(config.dataset, config.use_rxn_class, config.experiments, config.output_path); output.mkdir(parents=True, exist_ok=True)
+        output = paths.round_trip_prediction_dir(config.dataset, config.use_rxn_class, config.experiments, config.output_path)
+        output.mkdir(parents=True, exist_ok=True)
     else:
         output = paths.prediction_report(config.dataset, config.use_rxn_class, config.experiments, config.output_path, default_name)
         if output_kind == 'full' and not config.output_path:

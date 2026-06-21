@@ -52,8 +52,7 @@ jobs:
           python-version: '3.11'
       - name: Install runtime dependencies
         run: python -m pip install -e '.[runtime,test]'
-      - name: Runtime import and compatibility tests
+      - name: Runtime tests
         run: |
-          python -c "from models.KGCL import KGCL; from models.beam_search import BeamSearch; from utils.rxn_graphs import MolGraph, RxnGraph, Vocab; from utils.generate_edits import ReactionData"
+          python -m pytest tests/runtime -q
           python -m pytest tests/compatibility -q
-          python -m pytest tests/smoke -q

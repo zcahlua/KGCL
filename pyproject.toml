@@ -31,6 +31,7 @@ include = ["kgcl*", "models*", "utils*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = ["runtime: tests requiring scientific runtime dependencies"]
 
 [project.scripts]
 kgcl-train = "kgcl.cli.train:main"
@@ -44,8 +45,7 @@ kgcl-canonicalize = "kgcl.cli.canonicalize:main"
 
 [tool.ruff.lint.per-file-ignores]
 "src/kgcl/config/loader.py" = ["E401", "E701"]
-"src/kgcl/data/canonicalization.py" = ["E722"]
 "src/kgcl/data/preprocessing.py" = ["F841"]
-"src/kgcl/evaluation/*.py" = ["E701", "E702", "E722", "F401", "F841"]
-"src/kgcl/training/*.py" = ["E701", "E702", "F401"]
-"tests/**/*.py" = ["E401", "F401"]
+# Narrow legacy runtime exceptions: training engine/runner retain historical dense statement layout pending a non-semantic style-only cleanup.
+"src/kgcl/training/engine.py" = ["E701", "E702"]
+"src/kgcl/training/runner.py" = ["E702"]

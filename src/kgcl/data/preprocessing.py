@@ -1,13 +1,14 @@
 import sys
-import os
 from collections import Counter
 from collections.abc import Sequence
-from typing import Any, List
+from typing import List
 
 import joblib
 import pandas as pd
 from rdkit import Chem
 
+from kgcl.config import KGCLConfig
+from kgcl.config.paths import ProjectPaths
 from utils.generate_edits import generate_reaction_edits
 
 
@@ -19,26 +20,29 @@ def check_edits(edits: List):
     return True
 
 
-def preprocessing(rxns: Sequence[str], args: Any, rxn_classes: Sequence[int] | None = None, rxns_id: Sequence[str] | None = None) -> None:
+def is_valid_reaction_side(mol: Chem.Mol | None) -> bool:
+    return mol is not None and mol.GetNumAtoms() > 1 and mol.GetNumBonds() > 1
+
+
+def preprocessing(rxns: Sequence[str], args: KGCLConfig, rxn_classes: Sequence[int] | None = None, rxns_id: Sequence[str] | None = None) -> None:
+    """Preprocess reactions data to get edits."""
     rxn_classes = [] if rxn_classes is None else list(rxn_classes)
     rxns_id = [] if rxns_id is None else list(rxns_id)
     if args.dataset == 'uspto_50k' and (len(rxn_classes) != len(rxns) or len(rxns_id) != len(rxns)):
         raise ValueError('USPTO-50K preprocessing requires rxn_classes and rxn_ids for every reaction.')
-    """
-    preprocess reactions data to get edits
-    """
     rxns_data = []
     counter = []
     all_edits = {}
 
-    savedir = os.path.join(args.root_dir, 'data', args.dataset, args.mode)
-    os.makedirs(savedir, exist_ok=True)
+    paths = ProjectPaths(args.root_dir)
+    savedir = paths.split_dir(args.dataset, args.mode)
+    savedir.mkdir(parents=True, exist_ok=True)
 
     for idx, rxn_smi in enumerate(rxns):
         r, p = rxn_smi.split('>>')
         prod_mol = Chem.MolFromSmiles(p)
 
-        if (prod_mol is None) or (prod_mol.GetNumAtoms() <= 1) or (prod_mol.GetNumBonds() <= 1):
+        if not is_valid_reaction_side(prod_mol):
             print(
                 f'Product has 0 or 1 atom or 1 bond, Skipping reaction {idx}')
             print()
@@ -47,7 +51,7 @@ def preprocessing(rxns: Sequence[str], args: Any, rxn_classes: Sequence[int] | N
 
         react_mol = Chem.MolFromSmiles(r)
 
-        if (react_mol is None) or (react_mol.GetNumAtoms() <= 1) or (prod_mol.GetNumBonds() <= 1):
+        if not is_valid_reaction_side(react_mol):
             print(
                 f'Reactant has 0 or 1 atom or 1 bond, Skipping reaction {idx}')
             print()
@@ -62,7 +66,7 @@ def preprocessing(rxns: Sequence[str], args: Any, rxn_classes: Sequence[int] | N
                 rxn_data = generate_reaction_edits(
                     rxn_smi, kekulize=args.kekulize)
         except Exception as exc:
-            print(f'Failed to extract reaction data, skipping reaction {idx}')
+            print(f'Failed to extract reaction data for reaction {idx}: {exc}')
             print()
             sys.stdout.flush()
             continue
@@ -97,9 +101,7 @@ def preprocessing(rxns: Sequence[str], args: Any, rxn_classes: Sequence[int] | N
     print(f'All {args.mode} reactions complete.')
     sys.stdout.flush()
 
-    save_file = os.path.join(savedir, f'{args.mode}.file')
-    if args.kekulize:
-        save_file += '.kekulized'
+    save_file = paths.serialized_reactions_file(args.dataset, args.mode, args.kekulize)
 
     if args.mode == 'train':
         for idx, rxn_data in enumerate(rxns_data):
@@ -165,13 +167,13 @@ def preprocessing(rxns: Sequence[str], args: Any, rxn_classes: Sequence[int] | N
         print(Counter(counter))
 
         joblib.dump(filter_rxns_data, save_file, compress=3)
-        joblib.dump(atom_edits, os.path.join(savedir, 'atom_vocab.txt'))
-        joblib.dump(bond_edits, os.path.join(savedir, 'bond_vocab.txt'))
-        joblib.dump(lg_edits, os.path.join(savedir, 'lg_vocab.txt'))
-        joblib.dump(atom_lg_edits, os.path.join(savedir, 'atom_lg_vocab.txt'))
+        joblib.dump(atom_edits, savedir / 'atom_vocab.txt')
+        joblib.dump(bond_edits, savedir / 'bond_vocab.txt')
+        joblib.dump(lg_edits, savedir / 'lg_vocab.txt')
+        joblib.dump(atom_lg_edits, savedir / 'atom_lg_vocab.txt')
     else:
-        bond_vocab_file = os.path.join(args.root_dir, 'data', args.dataset, 'train', 'bond_vocab.txt')
-        atom_vocab_file = os.path.join(args.root_dir, 'data', args.dataset, 'train', 'atom_lg_vocab.txt')
+        bond_vocab_file = paths.vocab_file(args.dataset, 'bond_vocab.txt')
+        atom_vocab_file = paths.vocab_file(args.dataset, 'atom_lg_vocab.txt')
         bond_vocab = joblib.load(bond_vocab_file)
         atom_vocab = joblib.load(atom_vocab_file)
         bond_vocab.extend(atom_vocab)
@@ -194,12 +196,14 @@ def preprocessing(rxns: Sequence[str], args: Any, rxn_classes: Sequence[int] | N
         joblib.dump(rxns_data, save_file, compress=3)
 
 
-def run(args):
+def run(args: KGCLConfig):
     args.print_every = args.preprocess_print_every
-    datadir = os.path.join(args.root_dir, 'data', args.dataset)
+    paths = ProjectPaths(args.root_dir)
     rxn_key = 'reactants>reagents>production'
-    filename = f'canonicalized_{args.mode}.csv'
-    df = pd.read_csv(os.path.join(datadir, filename))
+    input_csv = paths.canonicalized_csv(args.dataset, args.mode)
+    if not input_csv.exists():
+        raise FileNotFoundError(f'Canonicalized input CSV not found: {input_csv}')
+    df = pd.read_csv(input_csv)
     if args.dataset == 'uspto_50k':
         preprocessing(rxns=df[rxn_key], args=args, rxn_classes=df['class'], rxns_id=df['id'])
     else:
