@@ -1,286 +1,85 @@
-import argparse
-import os
-import sys
-import random
-from kgcl.config import add_arguments, add_config_argument, load_config
+from __future__ import annotations
+from datetime import datetime
 
-import numpy as np
-from utils.ADNCE import ADNCE, adnce
+from kgcl.config.device import resolve_device
+from kgcl.config.paths import ProjectPaths
+from kgcl.resources.functional_groups import configure_functional_group_resources
+from kgcl.training.context import TrainingContext
 
-import joblib
-from datetime import datetime as dt
 
-import torch
-import torch.nn as nn
-from rdkit import RDLogger
-from torch.optim import Adam, lr_scheduler
-
-from models import KGCL
-from models.model_utils import CSVLogger, get_seq_edit_accuracy
-from utils.datasets import RetroEditDataset, RetroEvalDataset
-from utils.mol_features import ATOM_FDIM, BOND_FDIM
-from utils.rxn_graphs import Vocab
-
-lg = RDLogger.logger()
-lg.setLevel(RDLogger.CRITICAL)
-
-DATE_TIME = dt.now().strftime('%d-%m-%Y--%H-%M-%S')
-ROOT_DIR = './'
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-loss_adnce_1 = ADNCE(temperature=0.3, reduction='mean', mu=0.5, sigma=1.0)
-loss_adnce_2 = ADNCE(temperature=0.3, reduction='mean', mu=0.3, sigma=1.0)
 def build_model_config(args):
-    model_config = {}
-    if args.get('use_rxn_class', False):
-        atom_fdim = ATOM_FDIM + 10
+    from utils.mol_features import ATOM_FDIM, BOND_FDIM
+    atom_fdim = ATOM_FDIM + 10 if args.get('use_rxn_class', False) else ATOM_FDIM
+    return {
+        'n_atom_feat': atom_fdim,
+        'n_bond_feat': BOND_FDIM if args.get('atom_message', False) else atom_fdim + BOND_FDIM,
+        'mpn_size': args['mpn_size'], 'mlp_size': args['mlp_size'], 'depth': args['depth'],
+        'dropout_mlp': args['dropout_mlp'], 'dropout_mpn': args['dropout_mpn'],
+        'atom_message': args['atom_message'], 'use_attn': args['use_attn'], 'n_heads': args['n_heads'],
+    }
+
+
+def run_training(config):
+    if hasattr(config, 'to_dict'):
+        args = config.to_dict()
     else:
-        atom_fdim = ATOM_FDIM
-    model_config['n_atom_feat'] = atom_fdim
-    if args.get('atom_message', False):
-        model_config['n_bond_feat'] = BOND_FDIM
-    else:
-        model_config['n_bond_feat'] = atom_fdim + BOND_FDIM
-    model_config['mpn_size'] = args['mpn_size']
-    model_config['mlp_size'] = args['mlp_size']
-    model_config['depth'] = args['depth']
-    model_config['dropout_mlp'] = args['dropout_mlp']
-    model_config['dropout_mpn'] = args['dropout_mpn']
-    model_config['atom_message'] = args['atom_message']
-    model_config['use_attn'] = args['use_attn']
-    model_config['n_heads'] = args['n_heads']
+        args = dict(config)
+    if args.get('train_batch_size', 1) != 1:
+        raise ValueError('train_batch_size greater than 1 is not supported; serialized shard DataLoader batch size is fixed at 1. Use preprocess_batch_size to control reaction shard size.')
+    paths = ProjectPaths(args.get('root_dir', './'))
+    configure_functional_group_resources(resource_root=args.get('resource_root'), root_dir=paths.root)
 
-    return model_config
+    import sys
+    import joblib
+    import torch
+    from rdkit import RDLogger
+    from torch.optim import Adam, lr_scheduler
+    from models import KGCL
+    from models.model_utils import CSVLogger
+    from utils.datasets import RetroEditDataset, RetroEvalDataset
+    from utils.rxn_graphs import Vocab
+    from kgcl.training.checkpointing import save_checkpoint
+    from kgcl.training.engine import train_epoch, validate
+    from kgcl.training.objectives import build_objectives
 
+    RDLogger.logger().setLevel(RDLogger.CRITICAL)
+    device = resolve_device(args.get('device', 'auto'))
+    if args.get('lr') is None and args['dataset'] == 'uspto_50k': args['lr'] = 0.001
+    elif args.get('lr') is None and args['dataset'] == 'uspto_full': args['lr'] = 0.0001
 
-def save_checkpoint(model, path, epoch):
-    save_dict = {'state': model.state_dict()}
-    if hasattr(model, 'get_saveables'):
-        save_dict['saveables'] = model.get_saveables()
+    run_started_at = datetime.now()
+    out_dir = paths.experiment_dir(args['dataset'], args.get('use_rxn_class', False), run_started_at.strftime('%d-%m-%Y--%H-%M-%S'))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    context = TrainingContext(device=device, paths=paths, run_started_at=run_started_at, output_dir=out_dir)
 
-    name = f'epoch_{epoch + 1}.pt'
-    save_file = os.path.join(path, name)
-    torch.save(save_dict, save_file)
+    csv_logger = CSVLogger(args=args, fieldnames=['epoch', 'train_acc', 'valid_acc', 'valid_first_step_acc', 'train_loss'], filename=str(context.output_dir / 'logs.csv'))
+    bond_vocab = Vocab(joblib.load(paths.vocab_file(args['dataset'], 'bond_vocab.txt')))
+    atom_vocab = Vocab(joblib.load(paths.vocab_file(args['dataset'], 'atom_lg_vocab.txt')))
+    train_dir = paths.prepared_shard_dir(args['dataset'], 'train', args.get('use_rxn_class', False))
+    eval_dir = paths.split_dir(args['dataset'], 'valid')
+    train_data = RetroEditDataset(data_dir=str(train_dir)).loader(batch_size=1, num_workers=args['num_workers'], shuffle=True)
+    valid_file = paths.serialized_reactions_file(args['dataset'], 'valid', args.get('kekulize', True)).name
+    valid_data = RetroEvalDataset(data_dir=str(eval_dir), data_file=valid_file, use_rxn_class=args['use_rxn_class']).loader(batch_size=1, num_workers=args['num_workers'])
+    if len(train_data) == 0:
+        raise ValueError(f'Training dataset is empty: {train_dir}')
+    if len(valid_data) == 0:
+        raise ValueError(f'Validation dataset is empty: {eval_dir / valid_file}')
 
-def train_epoch(args, epoch, model, train_data, loss_fn, optimizer):
-    torch.cuda.empty_cache()
-    model.train()
-    train_loss = 0
-    train_acc = 0
-
-    for batch_id, batch_data in enumerate(train_data):
-        graph_seq_tensors, seq_labels, seq_mask = batch_data
-        seq_mask = seq_mask.to(DEVICE)
-        seq_edit_scores, batch_graph_outs = model(graph_seq_tensors)
-        max_seq_len, batch_size = seq_mask.size()
-        seq_loss = []
-
-        for idx in range(max_seq_len):
-            edit_labels_idx = model.to_device(seq_labels[idx])
-
-            loss_batch = [seq_mask[idx][i] * loss_fn(seq_edit_scores[idx][i].unsqueeze(0),
-                                                     torch.argmax(edit_labels_idx[i]).unsqueeze(0).long()).sum()
-                          for i in range(batch_size)]
-
-            loss = torch.stack(loss_batch, dim=0).mean()
-            seq_loss.append(loss)
-
-        p_feature_list = [element for element in batch_graph_outs[0]]
-
-        r_feature_list = []
-        seq_mask_list = seq_mask.tolist()
-        for col_idx in range(batch_size):
-            first_element = batch_graph_outs[0][col_idx]
-            non_zero_elements = [
-                row[col_idx] for row_idx, row in enumerate(batch_graph_outs)
-                if not torch.equal(row[col_idx], first_element) and seq_mask_list[row_idx][col_idx]
-            ]
-            if non_zero_elements:
-                random_element = random.choice(non_zero_elements)
-                r_feature_list.append(random_element)
-            else:
-                r_feature_list.append(first_element)
-
-
-        p_features = torch.stack(p_feature_list)
-        r_features = torch.stack(r_feature_list)
-
-        if args.get('use_rxn_class', False):  # use rxn class
-            loss_c = loss_adnce_2(p_features, r_features)
-            total_loss = torch.stack(seq_loss).mean() + 0.4 * loss_c
-        else:  # without rxn_class
-            loss_c = loss_adnce_1(p_features, r_features)
-            total_loss = torch.stack(seq_loss).mean() + 0.3 * loss_c
-
-        accuracy = get_seq_edit_accuracy(seq_edit_scores, seq_labels, seq_mask)
-        train_loss += total_loss.item()
-        train_acc += accuracy
-
-        optimizer.zero_grad()
-        total_loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), args['max_clip'])
-        optimizer.step()
-
-        if (batch_id + 1) % args['print_every'] == 0:
-            print('\repoch %d/%d, batch %d/%d, loss: %.4f, accuracy: %.4f' % (
-            epoch + 1, args['epochs'], batch_id + 1, len(
-                train_data), train_loss / (batch_id + 1), train_acc / (batch_id + 1)), end='', flush=True)
-
-    train_loss = float('%.4f' % (train_loss / len(train_data)))
-    train_acc = float('%.4f' % (train_acc / len(train_data)))
-    print('\nepoch %d/%d, train loss: %.4f, train accuracy: %.4f' %
-          (epoch + 1, args['epochs'], train_loss, train_acc))
-
-    return train_loss, train_acc
-
-
-def test(model, valid_data):
-    model.eval()
-    total_accuracy = 0.0
-    first_step_accuracy = 0.0
-    with torch.no_grad():
-        for batch_id, batch_data in enumerate(valid_data):
-            prod_smi_batch, edits_batch, edits_atom_batch, rxn_classes = batch_data
-            for idx, prod_smi in enumerate(prod_smi_batch):
-                if rxn_classes is None:
-                    edits, edits_atom = model.predict(prod_smi)
-                else:
-                    edits, edits_atom = model.predict(
-                        prod_smi, rxn_class=rxn_classes[idx])
-                if edits == edits_batch[idx] and edits_atom == edits_atom_batch[idx]:
-                    total_accuracy += 1.0
-                if edits[0] == edits_batch[idx][0] and edits_atom[0] == edits_atom_batch[idx][0]:
-                    first_step_accuracy += 1.0
-    valid_acc = float('%.4f' % (total_accuracy / len(valid_data)))
-    valid_first_step_acc = float(
-        '%.4f' % (first_step_accuracy / len(valid_data)))
-
-    return valid_acc, valid_first_step_acc
-
-
-def run_training(args):
-    global DEVICE
-    if hasattr(args, "to_dict"):
-        args = args.to_dict()
-
-    ROOT_DIR = args.get('root_dir', './')
-    if args.get('device', 'auto') == 'auto':
-        DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-    else:
-        DEVICE = args['device']
-
-    if args.get('lr') is None and args['dataset'] == 'uspto_50k':
-        args['lr'] = 0.001
-    elif args.get('lr') is None and args['dataset'] == 'uspto_full':
-        args['lr'] = 0.0001
-
-    if args.get('use_rxn_class', False):
-        out_dir = os.path.join(ROOT_DIR, 'experiments',
-                               args['dataset'], 'with_rxn_class', DATE_TIME)
-    else:
-        out_dir = os.path.join(ROOT_DIR, 'experiments',
-                               args['dataset'], 'without_rxn_class', DATE_TIME)
-    os.makedirs(out_dir, exist_ok=True)
-
-    logs_filename = os.path.join(out_dir, 'logs.csv')
-    csv_logger = CSVLogger(
-        args=args,
-        fieldnames=['epoch', 'train_acc', 'valid_acc',
-                    'valid_first_step_acc', 'train_loss'],
-        filename=logs_filename,
-    )
-
-    data_dir = os.path.join(ROOT_DIR, 'data', args['dataset'])
-    # load bond, atom and lg vocab
-    bond_vocab_file = os.path.join(data_dir, 'train', 'bond_vocab.txt')
-    atom_vocab_file = os.path.join(data_dir, 'train', 'atom_lg_vocab.txt')
-    bond_vocab = Vocab(joblib.load(bond_vocab_file))
-    atom_vocab = Vocab(joblib.load(atom_vocab_file))
-
-    if args.get('use_rxn_class', False):
-        train_dir = os.path.join(data_dir, 'train', 'with_rxn_class')
-    else:
-        train_dir = os.path.join(data_dir, 'train', 'without_rxn_class')
-    eval_dir = os.path.join(data_dir, 'valid')
-
-    train_dataset = RetroEditDataset(data_dir=train_dir)
-    train_data = train_dataset.loader(
-        batch_size=1, num_workers=args['num_workers'], shuffle=True)
-
-    valid_dataset = RetroEvalDataset(
-        data_dir=eval_dir, data_file=('valid.file.kekulized' if args.get('kekulize', True) else 'valid.file'), use_rxn_class=args['use_rxn_class'])
-    valid_data = valid_dataset.loader(
-        batch_size=1, num_workers=args['num_workers'])
-
-    model_config = build_model_config(args)
-
-    model = KGCL(config=model_config, atom_vocab=atom_vocab,
-                        bond_vocab=bond_vocab, device=DEVICE)
-    print(f'Converting model to device: {DEVICE}')
-    sys.stdout.flush()
-    model.to(DEVICE)
-    print("Param Count: ", sum([x.nelement()
-                                for x in model.parameters()]) / 10 ** 6, "M")
-    print()
-
-    loss_fn = nn.CrossEntropyLoss(reduction='none')
+    model = KGCL(config=build_model_config(args), atom_vocab=atom_vocab, bond_vocab=bond_vocab, device=device)
+    print(f'Converting model to device: {device}'); sys.stdout.flush(); model.to(device)
+    print('Param Count: ', sum([x.nelement() for x in model.parameters()]) / 10 ** 6, 'M'); print()
+    objectives = build_objectives()
     optimizer = Adam(model.parameters(), lr=args['lr'])
-    scheduler = lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='max', patience=args['patience'], factor=args['factor'], threshold=args['thresh'],
-        threshold_mode='abs')
-
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=args['patience'], factor=args['factor'], threshold=args['thresh'], threshold_mode='abs')
     best_acc = 0
     for epoch in range(args['epochs']):
-
-        train_loss, train_acc = train_epoch(
-            args, epoch, model, train_data, loss_fn, optimizer)
-        valid_acc, valid_first_step_acc = test(model, valid_data)
+        train_loss, train_acc = train_epoch(args, epoch, model, train_data, objectives, optimizer, device=device)
+        valid_acc, valid_first_step_acc = validate(model, valid_data)
         scheduler.step(valid_acc)
-        print('epoch %d/%d, validation accuracy: %.4f, validation_first_acc: %.4f' %
-              (epoch + 1, args['epochs'], valid_acc, valid_first_step_acc))
-        print('---------------------------------------------------------')
-        print()
-
-        row = {
-            'epoch': str(epoch + 1),
-            'train_acc': str(train_acc),
-            'valid_acc': str(valid_acc),
-            'valid_first_step_acc': str(valid_first_step_acc),
-            'train_loss': str(train_loss),
-        }
-        csv_logger.writerow(row)
-
-        # update the best accuracy for saving checkpoints
+        print('epoch %d/%d, validation accuracy: %.4f, validation_first_acc: %.4f' % (epoch + 1, args['epochs'], valid_acc, valid_first_step_acc))
+        print('---------------------------------------------------------'); print()
+        csv_logger.writerow({'epoch': str(epoch + 1), 'train_acc': str(train_acc), 'valid_acc': str(valid_acc), 'valid_first_step_acc': str(valid_first_step_acc), 'train_loss': str(train_loss)})
         if valid_acc >= best_acc:
-            print(
-                f'Best eval accuracy so far. Saving best model from epoch {epoch + 1} (acc={valid_acc})')
-            print('---------------------------------------------------------')
-            print()
-            save_checkpoint(model, out_dir, epoch)
-            best_acc = valid_acc
-
-    csv_logger.close()
-    print('Experiment finished!')
-
-
-
-def build_parser():
-    parser = argparse.ArgumentParser(description='Train KGCL model')
-    add_config_argument(parser)
-    add_arguments(parser, ['dataset', 'root_dir', 'device', 'use_rxn_class', 'atom_message', 'use_attn', 'n_heads', 'epochs', 'mpn_size', 'depth', 'dropout_mpn', 'mlp_size', 'dropout_mlp', 'lr', 'patience', 'factor', 'thresh', 'max_clip', 'train_batch_size', 'print_every', 'num_workers', 'kekulize'])
-    return parser
-
-def parse_config(argv=None):
-    parsed = build_parser().parse_args(argv)
-    overrides = vars(parsed).copy()
-    config_file = overrides.pop('config_file')
-    return load_config(config_file=config_file, cli_overrides=overrides)
-
-def main(argv=None):
-    args = parse_config(argv).to_dict()
-    if args.get('train_batch_size', 1) != 1:
-        raise SystemExit('train_batch_size greater than 1 is not supported; serialized shard DataLoader batch size is fixed at 1. Use preprocess_batch_size to control reaction shard size.')
-    return run_training(args)
-
-if __name__ == '__main__':
-    raise SystemExit(main())
+            print(f'Best eval accuracy so far. Saving best model from epoch {epoch + 1} (acc={valid_acc})')
+            print('---------------------------------------------------------'); print(); save_checkpoint(model, context.output_dir, epoch); best_acc = valid_acc
+    csv_logger.close(); print('Experiment finished!')

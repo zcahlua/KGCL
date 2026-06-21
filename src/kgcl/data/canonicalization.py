@@ -5,7 +5,6 @@ used to renumber the reactant atoms.
 """
 from rdkit import Chem
 import os
-import argparse
 import pandas as pd
 
 from tqdm import tqdm
@@ -143,7 +142,3 @@ def run(args):
 
     new_df = pd.DataFrame.from_dict(new_dict)
     new_df.to_csv(os.path.join(datadir, new_file), index=False)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

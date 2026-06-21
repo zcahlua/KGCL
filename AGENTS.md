@@ -37,3 +37,12 @@
 - Treat `experiments/**/*.pt`, `*.pth`, `*.joblib`, `*.npy`, `*.npz`, and KGembedding pickle files as immutable.
 - Functional-group embeddings are external immutable research resources, not wheel package data; use `--resource-root` or `KGCL_RESOURCE_ROOT` outside a source checkout.
 - Run `python -m pytest -q`, `python -m compileall src`, root help commands, and binary hash verification before finishing.
+
+## Runtime resource configuration rules
+
+- Configure functional-group resources before importing `models`, `utils.rxn_graphs`, or constructing `MolGraph`.
+- Use `configure_functional_group_resources(resource_root=..., root_dir=...)`; resolution is explicit `--resource-root`, then `KGCL_RESOURCE_ROOT`, then `root_dir`, then source-checkout inference.
+- `ProjectPaths.root` must be absolute and resolved once; never prepend the root to a path already under the root.
+- Runtime modules must not own parser construction; parsers live in `src/kgcl/cli` only.
+- Binary assets remain immutable: do not edit checkpoints, KGembedding pickles, joblib files, NumPy arrays, images, PDFs, archives, or generated shards.
+- Verify with `python -m pytest -q`, `python -m compileall src`, all root `--help` commands, `ruff check src/kgcl tests`, `python -m build`, `python -m pip check`, `git diff --check`, and `python -m pytest tests/compatibility/test_binary_assets.py -q`.

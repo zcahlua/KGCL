@@ -6,7 +6,10 @@ from pathlib import Path
 class ProjectPaths:
     root: Path
     def __post_init__(self):
-        object.__setattr__(self, 'root', Path(self.root).expanduser())
+        object.__setattr__(self, 'root', Path(self.root).expanduser().resolve(strict=False))
+    def _resolve_user_path(self, value: str | Path, *, relative_to: Path) -> Path:
+        candidate = Path(value).expanduser()
+        return candidate.resolve(strict=False) if candidate.is_absolute() else (relative_to / candidate).resolve(strict=False)
     def dataset_dir(self, dataset: str) -> Path:
         return self.root / 'data' / dataset.lower()
     def raw_csv(self, dataset: str, mode: str) -> Path:
@@ -28,23 +31,21 @@ class ProjectPaths:
     def historical_checkpoint(self, dataset: str, use_rxn_class: bool, experiment: str) -> Path:
         return self.experiment_dir(dataset, use_rxn_class, experiment) / historical_checkpoint_name(dataset, use_rxn_class)
     def explicit_checkpoint(self, dataset: str, use_rxn_class: bool, experiment: str, checkpoint: str) -> Path:
-        candidate = Path(checkpoint).expanduser()
-        return candidate if candidate.is_absolute() else self.experiment_dir(dataset, use_rxn_class, experiment) / candidate
+        return self._resolve_user_path(checkpoint, relative_to=self.experiment_dir(dataset, use_rxn_class, experiment))
     def prediction_report(self, dataset: str, use_rxn_class: bool, experiment: str, output_path: str | None = None, default_name: str = 'pred_results.txt') -> Path:
-        candidate = Path(output_path).expanduser() if output_path else self.experiment_dir(dataset, use_rxn_class, experiment) / default_name
-        return candidate if candidate.is_absolute() else self.root / candidate
+        if output_path:
+            return self._resolve_user_path(output_path, relative_to=self.root)
+        return self.experiment_dir(dataset, use_rxn_class, experiment) / default_name
     def round_trip_prediction_dir(self, dataset: str, use_rxn_class: bool, experiment: str, output_path: str | None = None) -> Path:
-        candidate = Path(output_path).expanduser() if output_path else self.experiment_dir(dataset, use_rxn_class, experiment) / 'pred_text1'
-        return candidate if candidate.is_absolute() else self.root / candidate
+        if output_path:
+            return self._resolve_user_path(output_path, relative_to=self.root)
+        return self.experiment_dir(dataset, use_rxn_class, experiment) / 'pred_text1'
     def forward_prediction_input(self, dataset: str, use_rxn_class: bool, experiment: str, forward_predictions_path: str | None = None) -> Path:
-        candidate = Path(forward_predictions_path).expanduser() if forward_predictions_path else self.experiment_dir(dataset, use_rxn_class, experiment) / 'forward_predictions_50k_top50.txt'
-        return candidate if candidate.is_absolute() else self.root / candidate
+        if forward_predictions_path:
+            return self._resolve_user_path(forward_predictions_path, relative_to=self.root)
+        return self.experiment_dir(dataset, use_rxn_class, experiment) / 'forward_predictions_50k_top50.txt'
 
-DEFAULT_CHECKPOINTS = {
-    ('uspto_50k', False): 'epoch_132.pt',
-    ('uspto_50k', True): 'epoch_128.pt',
-    ('uspto_full', False): 'epoch_168.pt',
-}
+DEFAULT_CHECKPOINTS = {('uspto_50k', False): 'epoch_132.pt', ('uspto_50k', True): 'epoch_128.pt', ('uspto_full', False): 'epoch_168.pt'}
 
 def historical_checkpoint_name(dataset: str, use_rxn_class: bool) -> str:
     key = (dataset.lower(), bool(use_rxn_class))

@@ -1,7 +1,5 @@
 import os
 import numpy as np
-import argparse
-from kgcl.config import add_arguments, add_config_argument, load_config
 import joblib
 from tqdm import tqdm
 from collections import Counter
@@ -14,15 +12,13 @@ lg.setLevel(4)
 
 
 def run(args):
-    from kgcl.config.paths import ProjectPaths, resolve_checkpoint
-    from kgcl.config.device import resolve_device
-    paths = ProjectPaths(args.root_dir)
-    device = resolve_device(args.device)
-    print(f"Resolved device: {device}")
-    test_file = paths.serialized_reactions_file(args.dataset, "test", args.kekulize)
-    test_data = joblib.load(test_file)
-    exp_dir = paths.experiment_dir(args.dataset, args.use_rxn_class, args.experiments)
-    checkpoint_path = resolve_checkpoint(paths, args.dataset, args.use_rxn_class, args.experiments, args.checkpoint)
+    from kgcl.evaluation.common import evaluation_setup
+    context = evaluation_setup(args, output_kind='full')
+    paths = context.paths
+    device = context.device
+    test_data = joblib.load(context.test_data_path)
+    exp_dir = context.experiment_dir
+    checkpoint_path = context.checkpoint_path
     checkpoint = torch.load(checkpoint_path, map_location=device)
     config = checkpoint['saveables']
 
@@ -39,11 +35,7 @@ def run(args):
     beam_model = BeamSearch(model=model, step_beam_size=args.step_beam_size,
                             beam_size=args.full_beam_size, use_rxn_class=args.use_rxn_class)
     p_bar = tqdm(list(range(len(test_data))))
-    pred_file = str(paths.prediction_report(args.dataset, args.use_rxn_class, args.experiments, args.output_path))
-    file_num = 1
-    while os.path.exists(pred_file):
-        pred_file = os.path.join(exp_dir, f'pred_results_{file_num}.txt')
-        file_num += 1
+    pred_file = str(context.output_path)
 
     with open(pred_file, 'a') as fp:
         for idx in p_bar:

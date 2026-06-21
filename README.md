@@ -126,3 +126,39 @@ Console commands map directly to one parser per command: `kgcl-train`, `kgcl-pre
 Evaluation checkpoint paths are resolved with `--checkpoint` when supplied, otherwise historical defaults under `experiments/<dataset>/<class-mode>/<experiment>` are used. `--kekulize` selects `.file.kekulized`; `--no-kekulize` selects `.file`.
 
 `train_batch_size` is deprecated and must remain `1` because each prepared dataset item is already a serialized shard. Use `preprocess_batch_size` to control reactions per prepared shard.
+
+## Structural refactor notes
+
+Canonical implementation files now live under `src/`: model code in `src/models/KGCL.py` and `src/models/encoder.py`, attention utilities in `src/utils/attn_layer.py`, training orchestration in `src/kgcl/training/*`, evaluators in `src/kgcl/evaluation/*`, and data workflows in `src/kgcl/data/*`. Root scripts such as `train.py`, `preprocess.py`, and `eval.py` are compatibility wrappers around console commands (`kgcl-train`, `kgcl-preprocess`, `kgcl-prepare-data`, `kgcl-canonicalize`, `kgcl-eval`, `kgcl-eval-full`, and `kgcl-eval-rtacc`).
+
+Install lightweight development dependencies with `python -m pip install -e '.[test,dev]'`. Runtime scientific workflows require `python -m pip install -e '.[runtime,test]'`. Binary research resources remain external at the repository root in `KGembedding/` and `KGembedding_2/`; pass `--resource-root /path/to/repo-or-assets` or set `KGCL_RESOURCE_ROOT` when running outside the checkout. Plain and kekulized serialized data are selected with `--kekulize` / `--no-kekulize`.
+
+Valid examples:
+
+```bash
+python train.py --dataset uspto_50k
+python train.py --dataset uspto_full
+python eval.py --checkpoint epoch_132.pt --output-path reports/pred_results.txt
+python eval-full.py --dataset uspto_full
+python eval-rtacc.py --forward-predictions-path experiments/uspto_50k/without_rxn_class/BEST/forward_predictions_50k_top50.txt
+```
+
+Checkpoint paths that are relative are resolved under the experiment directory. Evaluation output paths that are explicit are honored exactly and parent directories are created. Standard and round-trip evaluation preserve historical append behavior; full evaluation uses `pred_results.txt`, `pred_results_1.txt`, etc. only when no explicit output path is supplied. `train_batch_size` is retained for compatibility but values other than `1` are rejected because serialized training shard loading is fixed at batch size one.
+
+Recommended checks:
+
+```bash
+python -m pytest -q
+python -m compileall src
+ruff check src/kgcl tests
+python -m build
+python -m pip check
+python train.py --help
+python preprocess.py --help
+python prepare_data.py --help
+python canonicalize_prod.py --help
+python eval.py --help
+python eval-full.py --help
+python eval-rtacc.py --help
+python -m pytest tests/compatibility/test_binary_assets.py -q
+```
