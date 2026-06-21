@@ -23,3 +23,12 @@ python prepare_data.py --batch_size 256  # legacy alias
 ```
 
 `lr` defaults to an unset value in the shared schema. Training resolves the historical dataset policy only when no explicit file, environment, or CLI learning rate is supplied: `0.001` for USPTO-50K and `0.0001` for USPTO-FULL.
+
+## Added evaluation/path fields
+
+| Canonical key | Legacy key/flag | Type | Default | Consumer | Validation |
+| --- | --- | --- | --- | --- | --- |
+| `step_beam_size` | `--step-beam-size`, `--step_beam_size`, `KGCL_STEP_BEAM_SIZE` | int | 10 | Evaluation beam-search construction | must be at least 1 |
+| `checkpoint` | `--checkpoint`, `KGCL_CHECKPOINT` | string/null | null | Checkpoint resolution policy | explicit path must exist before loading |
+| `output_path` | `--output-path`, `--output_path`, `KGCL_OUTPUT_PATH` | string/null | null | Prediction writers | parent directory is created by consumers |
+| `forward_predictions_path` | `--forward-predictions-path`, `--forward_predictions_path`, `KGCL_FORWARD_PREDICTIONS_PATH` | string/null | null | Round-trip evaluation | file must exist before consuming |

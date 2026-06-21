@@ -23,6 +23,10 @@ train_batch_size: 1
 preprocess_batch_size: 256
 beam_size: 50
 full_beam_size: 10
+step_beam_size: 10
+checkpoint: null
+output_path: null
+forward_predictions_path: null
 max_steps: 9
 num_workers: 24
 print_every: 200

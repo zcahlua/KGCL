@@ -35,6 +35,10 @@ class KGCLConfig:
     # evaluation
     beam_size: int = 50
     full_beam_size: int = 10
+    step_beam_size: int = 10
+    checkpoint: str | None = None
+    output_path: str | None = None
+    forward_predictions_path: str | None = None
     max_steps: int = 9
     # runtime/logging
     num_workers: int = 24
@@ -52,6 +56,9 @@ ALIASES = {
 
 FIELD_TYPES = get_type_hints(KGCLConfig)
 FIELD_TYPES["lr"] = float
+FIELD_TYPES["checkpoint"] = str
+FIELD_TYPES["output_path"] = str
+FIELD_TYPES["forward_predictions_path"] = str
 DEFAULTS = KGCLConfig()
 
 PARAMETER_HELP = {
@@ -79,6 +86,10 @@ PARAMETER_HELP = {
     "preprocess_batch_size": "Number of reactions per serialized preprocessing shard.",
     "beam_size": "Beam-search width for standard evaluation.",
     "full_beam_size": "Beam-search width for USPTO-FULL evaluation script.",
+    "step_beam_size": "Beam-search step expansion width.",
+    "checkpoint": "Checkpoint filename or absolute path. When unset, historical dataset defaults are used.",
+    "output_path": "Optional prediction output path.",
+    "forward_predictions_path": "Optional forward prediction file for round-trip evaluation.",
     "max_steps": "Maximum number of graph edit steps.",
     "num_workers": "DataLoader worker processes.",
     "print_every": "Training progress print interval.",

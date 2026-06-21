@@ -92,3 +92,7 @@ Relative paths are resolved by workflow code beneath `root_dir`. Training, prepr
 - Add lightweight CLI-only parser changes in `src/kgcl/cli/help.py` so `--help` remains dependency-light.
 - Put shared molecule-edit chemistry in `src/kgcl/chemistry/edit_application.py`.
 - Keep compatibility-sensitive model/data classes under top-level `models/` and `utils/` unless fixtures prove safe migration.
+
+## Current compatibility refactor notes
+
+The source tree now packages `kgcl*`, plus historical `models*` and `utils*` compatibility packages from `src/`. Root scripts are thin wrappers that delegate to `kgcl.cli.*` modules, while console entry points use `kgcl.cli.entrypoints` so `--help` remains available without scientific runtime dependencies. Functional-group embeddings are package resources in `kgcl.resources.functional_groups` and are loaded lazily through `importlib.resources`.
